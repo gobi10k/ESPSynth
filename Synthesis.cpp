@@ -118,14 +118,17 @@ void FMPair::setFrequency(float hz) {
 
 float FMPair::process() {
     // Modulator with feedback
+    // Explicitly handle sign and wrap-around safely
     int32_t fbOffset = (int32_t)(lastModOut_ * feedback_ * (float)modInc_ * 2.0f);
-    float modOut = Wavetables::readSine((uint32_t)((int32_t)modPhase_ + fbOffset));
+    uint32_t modPhaseEff = (uint32_t)((int64_t)modPhase_ + fbOffset);
+    float modOut = Wavetables::readSine(modPhaseEff);
     lastModOut_ = modOut;
     modPhase_ += modInc_;
     
     // FM: modulator affects carrier phase
     int32_t fmOffset = (int32_t)(modOut * modIndex_ * (float)carrierInc_);
-    float carrierOut = Wavetables::readSine((uint32_t)((int32_t)carrierPhase_ + fmOffset));
+    uint32_t carrierPhaseEff = (uint32_t)((int64_t)carrierPhase_ + fmOffset);
+    float carrierOut = Wavetables::readSine(carrierPhaseEff);
     carrierPhase_ += carrierInc_;
     
     return carrierOut;

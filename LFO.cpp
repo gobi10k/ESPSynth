@@ -1,4 +1,5 @@
 #include "LFO.h"
+#include "Wavetables.h"
 #include <math.h>
 
 LFO::LFO() :
@@ -43,7 +44,7 @@ void LFO::sync() {
 
 float LFO::process() {
     // Apply phase offset
-    uint32_t effectivePhase = phase_ + (uint32_t)(phaseOffset_ * PHASE_MAX);
+    uint32_t effectivePhase = phase_ + (uint32_t)(phaseOffset_ * (float)0xFFFFFFFF);
     
     // Normalized phase 0-1
     float t = effectivePhase * PHASE_TO_FLOAT;
@@ -52,18 +53,11 @@ float LFO::process() {
     
     switch (waveform_) {
         case LFOWaveform::SINE:
-            value = sinf(t * 2.0f * M_PI);
+            value = Wavetables::readSine(effectivePhase);
             break;
             
         case LFOWaveform::TRIANGLE:
-            // Triangle from 0-1 phase
-            if (t < 0.25f) {
-                value = t * 4.0f;
-            } else if (t < 0.75f) {
-                value = 1.0f - (t - 0.25f) * 4.0f;
-            } else {
-                value = -1.0f + (t - 0.75f) * 4.0f;
-            }
+            value = Wavetables::readTriangle(effectivePhase, 2);
             break;
             
         case LFOWaveform::SAW_UP:

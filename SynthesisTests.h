@@ -6,6 +6,7 @@
 #include "Filter.h"
 #include "MoogFilter.h"
 #include "Envelope.h"
+#include "ModMatrix.h"
 #include <Arduino.h>
 
 class SynthesisTests {
@@ -19,10 +20,23 @@ public:
         testFM();
         testSync();
         testRingMod();
+        testModMatrix();
         Serial.println("--- ALL TESTS COMPLETED ---\n");
     }
 
 private:
+    static void testModMatrix() {
+        Serial.print("Testing ModMatrix... ");
+        ModMatrix mm;
+        mm.setSourceValue(ModSource::LFO1, 0.5f);
+        mm.setSlot(0, ModSource::LFO1, ModDest::FILTER_CUTOFF, 1.0f);
+        mm.process();
+        float val = mm.getModulation(ModDest::FILTER_CUTOFF);
+
+        bool passed = (fabsf(val - 0.5f) < 0.001f);
+        Serial.println(passed ? "PASSED" : "FAILED");
+    }
+
     static void testOscillator() {
         Serial.print("Testing Oscillator... ");
         Oscillator osc;

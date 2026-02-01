@@ -123,9 +123,11 @@ int SynthEngine::findVoiceForNote(uint8_t note) {
 }
 
 int SynthEngine::allocateVoice(uint8_t note) {
+    Serial.printf("  allocateVoice for note %d\n", note);
     // First: find a free voice
     for (int i = 0; i < NUM_VOICES; i++) {
         if (voices_[i].isFree()) {
+            Serial.printf("  found free voice %d\n", i);
             return i;
         }
     }
@@ -140,6 +142,7 @@ int SynthEngine::allocateVoice(uint8_t note) {
         }
     }
     if (oldestReleasing >= 0) {
+        Serial.printf("  stealing releasing voice %d\n", oldestReleasing);
         voices_[oldestReleasing].forceOff();
         return oldestReleasing;
     }
@@ -153,11 +156,13 @@ int SynthEngine::allocateVoice(uint8_t note) {
             oldest = i;
         }
     }
+    Serial.printf("  stealing active voice %d\n", oldest);
     voices_[oldest].forceOff();
     return oldest;
 }
 
 void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
+    Serial.printf("SynthEngine::noteOn note:%d vel:%d\n", note, velocity);
     currentVelocity_ = velocity / 127.0f;
 
     // If arpeggiator is on, feed it instead

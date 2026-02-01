@@ -95,8 +95,8 @@ void GranularExciter::trigger(float pitch, float amp) {
             // Pitch with randomization
             float pitchVariation = (fastRandFloat() - 0.5f) * 2.0f * pitchSpread_;
             float grainPitch = pitch * powf(2.0f, pitchVariation / 12.0f);
-            g.phaseIncrement = grainPitch / SAMPLE_RATE;
-            g.phase = 0.0f;
+            g.phaseIncrement = (uint32_t)(grainPitch * PHASE_INCREMENT_MULTIPLIER);
+            g.phase = 0;
             
             return;
         }
@@ -109,21 +109,17 @@ void GranularExciter::spawnGrain() {
 
 float GranularExciter::getWindow(float position, GrainWindow window) {
     // position: 0 to 1 through grain lifetime
-    if (position < 0.0f) position = 0.0f;
+    if (position < 0.0f || isnan(position)) position = 0.0f;
     if (position > 1.0f) position = 1.0f;
 
+    int idx = (int)(position * (WINDOW_TABLE_SIZE - 1));
+    if (idx < 0) idx = 0;
+    if (idx >= WINDOW_TABLE_SIZE) idx = WINDOW_TABLE_SIZE - 1;
+
     switch (window) {
-        case GrainWindow::HANN: {
-            int idx = (int)(position * (WINDOW_TABLE_SIZE - 1));
+        case GrainWindow::HANN:
+        case GrainWindow::BLACKMAN:
             return hannTable_[idx];
-        }
-            
-        case GrainWindow::BLACKMAN: {
-            // Use Hann table as approximation or just fallback to math if rarely used
-            // For now, use Hann for performance
-            int idx = (int)(position * (WINDOW_TABLE_SIZE - 1));
-            return hannTable_[idx];
-        }
             
         case GrainWindow::TRIANGLE:
             return (position < 0.5f) ? (2.0f * position) : (2.0f * (1.0f - position));
@@ -145,16 +141,14 @@ float GranularExciter::getSourceSample(Grain& grain) {
             return (float)((int32_t)fastRand()) / (float)INT32_MAX;
             
         case GrainSource::SINE:
-            // Use Wavetables::readSine for much faster processing
-            return Wavetables::readSine((uint32_t)(grain.phase * (float)0xFFFFFFFF));
+            return Wavetables::readSine(grain.phase);
             
         case GrainSource::IMPULSE:
-            // Only non-zero at very start
-            return (grain.position < 0.01f) ? 1.0f : 0.0f;
+            return (grain.position < 1.0f) ? 1.0f : 0.0f;
             
         case GrainSource::TRIANGLE: {
-            float t = fmodf(grain.phase, 1.0f);
-            return (t < 0.5f) ? (4.0f * t - 1.0f) : (3.0f - 4.0f * t);
+            // Use Wavetables::readTriangle for consistency and speed
+            return Wavetables::readTriangle(grain.phase, 2); // Use mid-range table
         }
             
         case GrainSource::DUST:

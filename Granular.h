@@ -37,8 +37,8 @@ enum class GrainWindow : uint8_t {
 // Single grain state
 struct Grain {
     bool active;
-    float phase;
-    float phaseIncrement;
+    uint32_t phase;
+    uint32_t phaseIncrement;
     float amplitude;
     float position;     // 0-1 within grain duration
     float duration;     // In samples

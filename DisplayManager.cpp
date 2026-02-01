@@ -17,11 +17,13 @@ DisplayManager::DisplayManager() :
 bool DisplayManager::init(SynthEngine* engine) {
     engine_ = engine;
     
+    Serial.printf("[Display] Initializing on SDA:%d, SCL:%d\n", I2C_SDA_PIN, I2C_SCL_PIN);
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
     Wire.setClock(400000);
+    delay(100); // Give OLED time to power up
     
     if (!display_.begin()) {
-        Serial.println("[Display] Init failed");
+        Serial.println("[Display] SH1106 Init failed");
         return false;
     }
     
@@ -77,7 +79,11 @@ void DisplayManager::drawUI() {
     // Row 1: Title + Voice Count
     display_.drawStr(0, y, "ESP32 SYNTH");
     snprintf(buf, sizeof(buf), "V:%d/%d", engine_->getActiveVoiceCount(), NUM_VOICES);
-    display_.drawStr(85, y, buf);
+    display_.drawStr(60, y, buf);
+
+    // Heap info for stability monitoring
+    snprintf(buf, sizeof(buf), "%dK", ESP.getFreeHeap() / 1024);
+    display_.drawStr(105, y, buf);
     
     y += 2;
     display_.drawLine(0, y, 127, y);

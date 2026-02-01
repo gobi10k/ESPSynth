@@ -636,7 +636,7 @@ void processCommand(const String& cmd) {
             SynthesisTests::runAll();
             break;
         case 'S':
-            Serial.println("Starting Stress Test...");
+            Serial.println("Starting Stress Test (All systems GO)...");
             synth.setSynthMode(VoiceSynthMode::FM);
             synth.setFMAmount(5.0f);
             synth.getEffects().setEnabled(true, true, true);
@@ -646,17 +646,21 @@ void processCommand(const String& cmd) {
             synth.setCombEnabled(true);
             synth.setGranularEnabled(true);
             for (int i = 0; i < NUM_VOICES; i++) {
-                synth.noteOn(60 + i * 4, 100);
+                Serial.printf("Triggering voice %d\n", i);
+                synth.noteOn(48 + i * 7, 100);
+                delay(100);
             }
             break;
         case 'V':
-            Serial.println("Voice Status:");
-            for (int i = 0; i < NUM_VOICES; i++) {
-                Voice& v = synth.getVoice(i);
-                Serial.printf("  Voice %d: %s, Note: %d, Level: %.2f\n",
-                              i, v.isActive() ? (v.isReleasing() ? "REL" : "ACT") : "FREE",
-                              v.getNote(), v.getLevel());
-            }
+            Serial.println("Stopping All Notes & Disabling Heavy FX");
+            synth.allNotesOff();
+            synth.setResonatorEnabled(false);
+            synth.setCombEnabled(false);
+            synth.setGranularEnabled(false);
+            break;
+        case 'm':
+            Serial.printf("System Heap: %d bytes free\n", ESP.getFreeHeap());
+            Serial.printf("Min Heap: %d bytes\n", ESP.getMinFreeHeap());
             break;
         // === GRANULAR / GLIDE ===
         case 'G':
