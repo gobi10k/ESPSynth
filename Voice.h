@@ -48,6 +48,7 @@ public:
     uint8_t getNote() const { return note_; }
     uint32_t getAge() const { return age_; }
     float getLevel() const { return ampEnv_.getValue(); }
+    float getFilterEnvValue() const { return filterEnv_.getValue(); }
     float getFrequency() const { return targetFreq_; }
     
     // Oscillators

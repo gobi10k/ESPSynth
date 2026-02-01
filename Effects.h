@@ -115,6 +115,10 @@ public:
     
     float process(float input);
 
+    bool isSatEnabled() const { return satEnabled_; }
+    bool isChorusEnabled() const { return chorusEnabled_; }
+    bool isDelayEnabled() const { return delayEnabled_; }
+
 private:
     bool satEnabled_;
     bool chorusEnabled_;

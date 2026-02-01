@@ -1,5 +1,5 @@
 #include "DisplayManager.h"
-#include "AudioEngine.h"
+#include "SynthEngine.h"
 #include <Wire.h>
 
 extern const char* WAVEFORM_NAMES[];
@@ -14,7 +14,7 @@ DisplayManager::DisplayManager() :
 {
 }
 
-bool DisplayManager::init(AudioEngine* engine) {
+bool DisplayManager::init(SynthEngine* engine) {
     engine_ = engine;
     
     Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
@@ -71,56 +71,59 @@ void DisplayManager::setRefreshRate(uint8_t fps) {
 void DisplayManager::drawUI() {
     if (!engine_) return;
     
-    char buf[24];
+    char buf[32];
     int y = 7;
     
-    // Row 1: Title + Master Vol
+    // Row 1: Title + Voice Count
     display_.drawStr(0, y, "ESP32 SYNTH");
-    snprintf(buf, sizeof(buf), "V%.0f%%", engine_->getMasterVolume() * 100);
-    display_.drawStr(100, y, buf);
+    snprintf(buf, sizeof(buf), "V:%d/%d", engine_->getActiveVoiceCount(), NUM_VOICES);
+    display_.drawStr(85, y, buf);
     
     y += 2;
     display_.drawLine(0, y, 127, y);
     y += 8;
     
     // Row 2: Oscillators
-    const Oscillator& osc1 = engine_->getOscillator(0);
-    float freq = osc1.getFrequency();
-    if (freq >= 1000.0f) {
-        snprintf(buf, sizeof(buf), "OSC:%s %.1fk", 
-                 WAVEFORM_NAMES[(int)osc1.getWaveform()], freq / 1000.0f);
-    } else {
-        snprintf(buf, sizeof(buf), "OSC:%s %.0fHz", 
-                 WAVEFORM_NAMES[(int)osc1.getWaveform()], freq);
-    }
+    Waveform wf1 = engine_->getOscWaveform(0);
+    Waveform wf2 = engine_->getOscWaveform(1);
+    snprintf(buf, sizeof(buf), "OSC: %s / %s", WAVEFORM_NAMES[(int)wf1], WAVEFORM_NAMES[(int)wf2]);
     display_.drawStr(0, y, buf);
     y += 9;
     
     // Row 3: Filter
-    Filter& flt = engine_->getFilter();
-    float cutoff = flt.getCutoff();
+    float cutoff = engine_->getFilterCutoff();
     if (cutoff >= 1000.0f) {
         snprintf(buf, sizeof(buf), "FLT:%s %.1fk R%.0f%%", 
-                 FILTER_MODE_NAMES[(int)flt.getMode()],
+                 FILTER_MODE_NAMES[(int)engine_->getFilterMode()],
                  cutoff / 1000.0f,
-                 flt.getResonance() * 100);
+                 engine_->getFilterResonance() * 100);
     } else {
         snprintf(buf, sizeof(buf), "FLT:%s %.0f R%.0f%%", 
-                 FILTER_MODE_NAMES[(int)flt.getMode()],
+                 FILTER_MODE_NAMES[(int)engine_->getFilterMode()],
                  cutoff,
-                 flt.getResonance() * 100);
+                 engine_->getFilterResonance() * 100);
     }
     display_.drawStr(0, y, buf);
     y += 9;
     
-    // Row 4: Envelopes (visual bars)
+    // Row 4: Envelopes (visual bars from first active voice)
+    float ampEnv = 0.0f;
+    float filterEnv = 0.0f;
+    for (int i = 0; i < NUM_VOICES; i++) {
+        if (engine_->getVoice(i).isActive()) {
+            ampEnv = engine_->getVoice(i).getLevel();
+            filterEnv = engine_->getVoice(i).getFilterEnvValue();
+            break;
+        }
+    }
+
     display_.drawStr(0, y, "A:");
-    int ampBar = (int)(engine_->getAmpEnvelope().getValue() * 25);
+    int ampBar = (int)(ampEnv * 25);
     display_.drawFrame(12, y - 6, 27, 7);
     if (ampBar > 0) display_.drawBox(13, y - 5, ampBar, 5);
     
     display_.drawStr(45, y, "F:");
-    int fltBar = (int)(engine_->getFilterEnvelope().getValue() * 25);
+    int fltBar = (int)(filterEnv * 25);
     display_.drawFrame(55, y - 6, 27, 7);
     if (fltBar > 0) display_.drawBox(56, y - 5, fltBar, 5);
     
@@ -132,17 +135,18 @@ void DisplayManager::drawUI() {
     y += 9;
     
     // Row 5: Effects status
-    EffectsChain& fx = engine_->getEffects();
     snprintf(buf, sizeof(buf), "FX:");
     display_.drawStr(0, y, buf);
     
     int fxX = 18;
-    // These would need proper getters, for now show placeholders
-    display_.drawStr(fxX, y, "[S]");
+    EffectsChain& fx = engine_->getEffects();
+    if (fx.isSatEnabled()) display_.drawStr(fxX, y, "[S]");
     fxX += 20;
-    display_.drawStr(fxX, y, "[C]");
+    if (fx.isChorusEnabled()) display_.drawStr(fxX, y, "[C]");
     fxX += 20;
-    display_.drawStr(fxX, y, "[D]");
+    if (fx.isDelayEnabled()) display_.drawStr(fxX, y, "[D]");
+    fxX += 20;
+    if (engine_->getReverb().isEnabled()) display_.drawStr(fxX, y, "[R]");
 }
 
 void DisplayManager::displayTaskWrapper(void* param) {

@@ -19,11 +19,13 @@
 #include "SynthEngine.h"
 #include "MIDIHandler.h"
 #include "PresetManager.h"
+#include "DisplayManager.h"
 #include "SynthesisTests.h"
 
 SynthEngine synth;
 MIDIHandler midi;
 PresetManager presets;
+DisplayManager display;
 
 // ============================================================================
 // STATE
@@ -205,6 +207,10 @@ void setup() {
     // Initialize subsystems
     presets.begin();
     
+    if (!display.init(&synth)) {
+        Serial.println("Display init failed");
+    }
+
     if (!synth.init()) {
         Serial.println("FATAL: Synth init failed");
         while (1) delay(1000);
@@ -228,6 +234,7 @@ void setup() {
     applyPreset(initPreset);
     
     synth.start();
+    display.start();
     
     printHelp();
     Serial.println("\nReady. Type ? for help.\n");
@@ -327,6 +334,8 @@ void printHelp() {
     Serial.println("  v<0-99>    Master volume %");
     Serial.println("  z          Print CPU statistics");
     Serial.println("  t          Run internal tests");
+    Serial.println("  S          Stress test (4 notes, FX on)");
+    Serial.println("  V          List active voices status");
     Serial.println("  ?          Help");
 }
 
@@ -625,6 +634,29 @@ void processCommand(const String& cmd) {
             break;
         case 't':
             SynthesisTests::runAll();
+            break;
+        case 'S':
+            Serial.println("Starting Stress Test...");
+            synth.setSynthMode(VoiceSynthMode::FM);
+            synth.setFMAmount(5.0f);
+            synth.getEffects().setEnabled(true, true, true);
+            synth.getReverb().setEnabled(true);
+            synth.getCompressor().setEnabled(true);
+            synth.setResonatorEnabled(true);
+            synth.setCombEnabled(true);
+            synth.setGranularEnabled(true);
+            for (int i = 0; i < NUM_VOICES; i++) {
+                synth.noteOn(60 + i * 4, 100);
+            }
+            break;
+        case 'V':
+            Serial.println("Voice Status:");
+            for (int i = 0; i < NUM_VOICES; i++) {
+                Voice& v = synth.getVoice(i);
+                Serial.printf("  Voice %d: %s, Note: %d, Level: %.2f\n",
+                              i, v.isActive() ? (v.isReleasing() ? "REL" : "ACT") : "FREE",
+                              v.getNote(), v.getLevel());
+            }
             break;
         // === GRANULAR / GLIDE ===
         case 'G':
