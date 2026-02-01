@@ -1,0 +1,88 @@
+#include "Compressor.h"
+#include <math.h>
+
+Compressor::Compressor() :
+    thresholdDb_(-12.0f),
+    thresholdLin_(0.25f),
+    ratio_(4.0f),
+    attackCoef_(0.0f),
+    releaseCoef_(0.0f),
+    makeupGain_(1.0f),
+    kneeWidth_(6.0f),
+    envelope_(0.0f),
+    gainReductionDb_(0.0f),
+    enabled_(false)
+{
+    setThreshold(-12.0f);
+    setRatio(4.0f);
+    setAttack(10.0f);
+    setRelease(100.0f);
+    setMakeupGain(0.0f);
+}
+
+void Compressor::setThreshold(float dB) {
+    thresholdDb_ = constrain(dB, -60.0f, 0.0f);
+    thresholdLin_ = powf(10.0f, thresholdDb_ / 20.0f);
+}
+
+void Compressor::setRatio(float ratio) {
+    ratio_ = constrain(ratio, 1.0f, 20.0f);
+}
+
+void Compressor::setAttack(float ms) {
+    ms = constrain(ms, 0.1f, 100.0f);
+    attackCoef_ = expf(-1.0f / (ms * 0.001f * SAMPLE_RATE));
+}
+
+void Compressor::setRelease(float ms) {
+    ms = constrain(ms, 10.0f, 1000.0f);
+    releaseCoef_ = expf(-1.0f / (ms * 0.001f * SAMPLE_RATE));
+}
+
+void Compressor::setMakeupGain(float dB) {
+    dB = constrain(dB, 0.0f, 24.0f);
+    makeupGain_ = powf(10.0f, dB / 20.0f);
+}
+
+void Compressor::setKnee(float dB) {
+    kneeWidth_ = constrain(dB, 0.0f, 12.0f);
+}
+
+float Compressor::process(float input) {
+    if (!enabled_) return input;
+    
+    // Get input level
+    float inputAbs = fabsf(input);
+    
+    // Convert to dB
+    float inputDb = (inputAbs > 0.00001f) ? 20.0f * log10f(inputAbs) : -100.0f;
+    
+    // Calculate gain reduction with soft knee
+    float overDb = inputDb - thresholdDb_;
+    float gainDb = 0.0f;
+    
+    if (kneeWidth_ > 0.0f && overDb > -kneeWidth_ / 2.0f && overDb < kneeWidth_ / 2.0f) {
+        // Soft knee region
+        float kneeInput = overDb + kneeWidth_ / 2.0f;
+        gainDb = (1.0f / ratio_ - 1.0f) * kneeInput * kneeInput / (2.0f * kneeWidth_);
+    } else if (overDb >= kneeWidth_ / 2.0f) {
+        // Above knee - full compression
+        gainDb = (1.0f / ratio_ - 1.0f) * overDb;
+    }
+    // Below knee: gainDb = 0 (no compression)
+    
+    // Smooth the gain reduction (envelope follower)
+    float targetEnv = -gainDb;
+    if (targetEnv > envelope_) {
+        envelope_ = attackCoef_ * envelope_ + (1.0f - attackCoef_) * targetEnv;
+    } else {
+        envelope_ = releaseCoef_ * envelope_ + (1.0f - releaseCoef_) * targetEnv;
+    }
+    
+    gainReductionDb_ = envelope_;
+    
+    // Apply gain reduction
+    float gainLin = powf(10.0f, -envelope_ / 20.0f);
+    
+    return input * gainLin * makeupGain_;
+}
