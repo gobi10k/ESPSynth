@@ -5,6 +5,7 @@
 #include "Wavetables.h"
 #include "Filter.h"
 #include "Arpeggiator.h"
+#include "Voice.h"
 
 constexpr uint8_t NUM_PRESETS = 16;
 constexpr uint32_t PRESET_MAGIC = 0x53594E54;  // "SYNT"
