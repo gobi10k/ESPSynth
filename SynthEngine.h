@@ -18,6 +18,46 @@
 
 constexpr uint8_t NUM_VOICES = 4;
 
+class AudioProfiler {
+public:
+    void startSample() {
+        startTime_ = micros();
+    }
+
+    void endSample() {
+        uint32_t elapsed = micros() - startTime_;
+        totalTime_ += elapsed;
+        sampleCount_++;
+        if (elapsed > maxTime_) maxTime_ = elapsed;
+        if (elapsed < minTime_) minTime_ = elapsed;
+    }
+
+    void printStats() {
+        if (sampleCount_ == 0) return;
+        uint32_t avgTime = totalTime_ / sampleCount_;
+        float blockDurationUs = (DMA_BUFFER_SAMPLES * 1000000.0f) / SAMPLE_RATE;
+        float cpuPercent = (avgTime / blockDurationUs) * 100.0f;
+
+        Serial.printf("Audio CPU: %.1f%% (avg: %luus, max: %luus, min: %luus) over %lu blocks\n",
+                      cpuPercent, avgTime, maxTime_, minTime_, sampleCount_);
+        reset();
+    }
+
+    void reset() {
+        totalTime_ = 0;
+        sampleCount_ = 0;
+        maxTime_ = 0;
+        minTime_ = 0xFFFFFFFF;
+    }
+
+private:
+    uint32_t startTime_;
+    uint32_t totalTime_ = 0;
+    uint32_t sampleCount_ = 0;
+    uint32_t maxTime_ = 0;
+    uint32_t minTime_ = 0xFFFFFFFF;
+};
+
 class SynthEngine {
 public:
     SynthEngine();
@@ -83,12 +123,19 @@ public:
     
     // Global Resonator (single instance for master chain)
     ResonatorBank& getResonator() { return resonator_; }
+    void setResonatorEnabled(bool en) { resonatorEnabled_ = en; }
+    bool isResonatorEnabled() const { return resonatorEnabled_; }
     
     // Global Comb (single instance for master chain)
     CombFilter& getComb() { return comb_; }
+    void setCombEnabled(bool en) { combEnabled_ = en; }
+    bool isCombEnabled() const { return combEnabled_; }
     
     // Granular exciter
     GranularExciter& getGranular() { return granular_; }
+    void setGranularEnabled(bool en) { granularEnabled_ = en; }
+    bool isGranularEnabled() const { return granularEnabled_; }
+    void setGranularMix(float mix);
     
     // Effects
     EffectsChain& getEffects() { return effects_; }
@@ -101,6 +148,9 @@ public:
     void setMasterVolume(float vol);
     float getMasterVolume() const { return masterVolume_.getTarget(); }
     
+    // Profiler
+    void printCPUStats() { profiler_.printStats(); }
+
     // Voice info
     uint8_t getActiveVoiceCount() const;
     Voice& getVoice(int i) { return voices_[i]; }
@@ -155,6 +205,7 @@ private:
     // Granular exciter
     GranularExciter granular_;
     float granularMix_;
+    bool granularEnabled_;
     
     // Effects
     EffectsChain effects_;
@@ -170,6 +221,7 @@ private:
     float currentVelocity_;
     volatile bool running_;
     TaskHandle_t audioTaskHandle_;
+    AudioProfiler profiler_;
 };
 
 #endif

@@ -20,6 +20,7 @@ SynthEngine::SynthEngine() :
     resonatorEnabled_(false),
     combEnabled_(false),
     granularMix_(0.0f),
+    granularEnabled_(false),
     currentVelocity_(0.0f),
     running_(false),
     audioTaskHandle_(nullptr)
@@ -165,26 +166,8 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
         return;
     }
     
-    Serial.printf("noteOn: note=%d vel=%d\n", note, velocity);
-    
-    // Find a free voice
-    int voice = -1;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        Serial.printf("  voice[%d] state=%d\n", i, (int)voices_[i].isFree());
-        if (voices_[i].isFree()) {
-            voice = i;
-            break;
-        }
-    }
-    
-    // If no free voice, steal voice 0
-    if (voice < 0) {
-        voice = 0;
-        Serial.println("  stealing voice 0");
-        voices_[voice].forceOff();
-    }
-    
-    Serial.printf("  using voice %d\n", voice);
+    int voice = allocateVoice(note);
+    if (voice < 0) return; // Should not happen with stealing
     
     // Configure voice (minimal settings)
     voices_[voice].setOscWaveform(0, oscWaveforms_[0]);
@@ -345,6 +328,10 @@ LFO& SynthEngine::getLFO(int index) {
     return lfos_[index % NUM_LFOS];
 }
 
+void SynthEngine::setGranularMix(float mix) {
+    granularMix_ = constrain(mix, 0.0f, 1.0f);
+}
+
 void SynthEngine::setMasterVolume(float vol) {
     masterVolume_.setTarget(constrain(vol, 0.0f, 1.0f));
 }
@@ -358,6 +345,7 @@ uint8_t SynthEngine::getActiveVoiceCount() const {
 }
 
 void SynthEngine::processBlock() {
+    profiler_.startSample();
     int16_t buffer[DMA_BUFFER_SAMPLES * 2];
     
     for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
@@ -429,6 +417,20 @@ void SynthEngine::processBlock() {
         
         // Scale down for mixing
         sample *= 0.3f;
+
+        // Apply Granular exciter (if enabled)
+        if (granularEnabled_) {
+            float gran = granular_.process();
+            sample = sample * (1.0f - granularMix_) + gran * granularMix_;
+        }
+
+        // Apply Resonator and Comb (if enabled)
+        if (resonatorEnabled_) {
+            sample = resonator_.process(sample);
+        }
+        if (combEnabled_) {
+            sample = comb_.process(sample);
+        }
         
         // Re-enable effects
         sample = effects_.process(sample);
@@ -450,6 +452,7 @@ void SynthEngine::processBlock() {
     
     size_t bytesWritten;
     i2s_write(I2S_NUM_0, buffer, sizeof(buffer), &bytesWritten, portMAX_DELAY);
+    profiler_.endSample();
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {

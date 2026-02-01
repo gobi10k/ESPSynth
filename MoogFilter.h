@@ -2,6 +2,7 @@
 #define MOOG_FILTER_H
 
 #include "Config.h"
+#include "MathUtils.h"
 
 /**
  * Moog Ladder Filter Approximation

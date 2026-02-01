@@ -165,8 +165,9 @@ float Oscillator::process() {
 
 float Oscillator::processWithFM(float fmInput, float fmAmount) {
     // FM synthesis: modulate phase increment
-    uint32_t fmOffset = (uint32_t)(fmInput * fmAmount * basePhaseIncrement_);
-    uint32_t effectiveIncrement = basePhaseIncrement_ + fmOffset;
+    // Use signed math to handle negative fmInput correctly
+    int32_t fmOffset = (int32_t)(fmInput * fmAmount * (float)basePhaseIncrement_);
+    uint32_t effectiveIncrement = (uint32_t)((int32_t)basePhaseIncrement_ + fmOffset);
     
     // Apply pitch mod on top
     if (pitchMod_ != 0.0f) {

@@ -24,7 +24,7 @@ constexpr uint8_t I2C_SCL_PIN = 18;
 constexpr uint32_t SAMPLE_RATE        = 48000;
 constexpr uint8_t  AUDIO_BIT_DEPTH    = 16;
 constexpr uint16_t DMA_BUFFER_COUNT   = 4;
-constexpr uint16_t DMA_BUFFER_SAMPLES = 64;
+constexpr uint16_t DMA_BUFFER_SAMPLES = 128;
 
 // ============================================================================
 // PHASE ACCUMULATOR

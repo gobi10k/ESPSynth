@@ -19,6 +19,7 @@
 #include "SynthEngine.h"
 #include "MIDIHandler.h"
 #include "PresetManager.h"
+#include "SynthesisTests.h"
 
 SynthEngine synth;
 MIDIHandler midi;
@@ -324,6 +325,8 @@ void printHelp() {
     Serial.println("-- Other --");
     Serial.println("  gl<ms>     Glide time");
     Serial.println("  v<0-99>    Master volume %");
+    Serial.println("  z          Print CPU statistics");
+    Serial.println("  t          Run internal tests");
     Serial.println("  ?          Help");
 }
 
@@ -404,8 +407,19 @@ void processCommand(const String& cmd) {
             Serial.printf("Cutoff: %.0fHz\n", value);
             break;
         case 'r':
-            synth.setFilterResonance(value / 100.0f);
-            Serial.printf("Resonance: %.0f%%\n", value);
+            if (c1 == 'p') {
+                synth.getResonator().setProfile((ResonatorProfile)((int)value % 6));
+                Serial.printf("Res profile: %d\n", (int)value);
+            } else if (c1 == 'd') {
+                synth.getResonator().setDamping(value / 100.0f);
+                Serial.printf("Res damp: %.0f%%\n", value);
+            } else if (c1 == 'b') {
+                synth.getResonator().setBrightness(value / 100.0f);
+                Serial.printf("Res brightness: %.0f%%\n", value);
+            } else {
+                synth.setFilterResonance(value / 100.0f);
+                Serial.printf("Resonance: %.0f%%\n", value);
+            }
             break;
         case 'f':
             if (c1 == 't') {
@@ -435,10 +449,8 @@ void processCommand(const String& cmd) {
         // === GLOBAL RESONATOR (M) ===
         case 'M':
             if (c1 == 'x') {
-                static bool resEnabled = false;
-                resEnabled = !resEnabled;
-                // Would need setter in SynthEngine
-                Serial.printf("Resonator: %s\n", resEnabled ? "ON" : "OFF");
+                synth.setResonatorEnabled(!synth.isResonatorEnabled());
+                Serial.printf("Resonator: %s\n", synth.isResonatorEnabled() ? "ON" : "OFF");
             } else if (c1 == 'p') {
                 synth.getResonator().setProfile((ResonatorProfile)((int)value % 6));
                 Serial.printf("Res profile: %d\n", (int)value);
@@ -454,9 +466,8 @@ void processCommand(const String& cmd) {
         // === GLOBAL COMB (B) ===
         case 'B':
             if (c1 == 'x') {
-                static bool combEnabled = false;
-                combEnabled = !combEnabled;
-                Serial.printf("Comb: %s\n", combEnabled ? "ON" : "OFF");
+                synth.setCombEnabled(!synth.isCombEnabled());
+                Serial.printf("Comb: %s\n", synth.isCombEnabled() ? "ON" : "OFF");
             } else if (c1 == 'm') {
                 synth.getComb().setMode((CombMode)((int)value % 4));
                 Serial.printf("Comb mode: %d\n", (int)value);
@@ -608,11 +619,34 @@ void processCommand(const String& cmd) {
             }
             break;
             
-        // === OTHER ===
+        // === PROFILER / TESTS ===
+        case 'z':
+            synth.printCPUStats();
+            break;
+        case 't':
+            SynthesisTests::runAll();
+            break;
+        // === GRANULAR / GLIDE ===
+        case 'G':
         case 'g':
             if (c1 == 'l') {
                 synth.setGlideTime(value);
                 Serial.printf("Glide: %.0fms\n", value);
+            } else if (c1 == 'x') {
+                synth.setGranularEnabled(!synth.isGranularEnabled());
+                Serial.printf("Granular: %s\n", synth.isGranularEnabled() ? "ON" : "OFF");
+            } else if (c1 == 'm') {
+                synth.setGranularMix(value / 100.0f);
+                Serial.printf("Granular Mix: %.0f%%\n", value);
+            } else if (c1 == 'd') {
+                synth.getGranular().setDensity(value);
+                Serial.printf("Granular Density: %.0f grains/sec\n", value);
+            } else if (c1 == 't') {
+                synth.getGranular().setDuration(value);
+                Serial.printf("Granular Duration: %.0fms\n", value);
+            } else if (c1 == 's') {
+                synth.getGranular().setSource((GrainSource)((int)value % 5));
+                Serial.printf("Granular Source: %d\n", (int)value % 5);
             }
             break;
         case 'v':

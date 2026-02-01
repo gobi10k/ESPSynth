@@ -25,7 +25,7 @@ void MoogFilter::setCutoff(float hz) {
     // Calculate coefficient
     // Using the formula: g = 1 - exp(-2 * pi * fc / fs)
     float fc = min(cutoffHz_, SAMPLE_RATE * 0.45f);
-    g_ = 1.0f - expf(-2.0f * M_PI * fc / SAMPLE_RATE);
+    g_ = 1.0f - fastExp(-2.0f * M_PI * fc / SAMPLE_RATE);
 }
 
 void MoogFilter::setResonance(float res) {
@@ -46,7 +46,7 @@ float MoogFilter::process(float input) {
     float modCutoff = cutoffHz_ + cutoffMod_;
     modCutoff = constrain(modCutoff, 20.0f, 20000.0f);
     float fc = min(modCutoff, SAMPLE_RATE * 0.45f);
-    float gMod = 1.0f - expf(-2.0f * M_PI * fc / SAMPLE_RATE);
+    float gMod = 1.0f - fastExp(-2.0f * M_PI * fc / SAMPLE_RATE);
     cutoffMod_ = 0.0f;
     
     // Calculate feedback amount (resonance)
@@ -98,7 +98,7 @@ LadderFilter::LadderFilter() :
 void LadderFilter::setCutoff(float hz) {
     cutoffHz_ = constrain(hz, 20.0f, 20000.0f);
     float fc = min(cutoffHz_, SAMPLE_RATE * 0.45f);
-    g_ = 1.0f - expf(-2.0f * M_PI * fc / SAMPLE_RATE);
+    g_ = 1.0f - fastExp(-2.0f * M_PI * fc / SAMPLE_RATE);
 }
 
 void LadderFilter::setResonance(float res) {
@@ -180,7 +180,7 @@ float LadderFilter::process(float input) {
     float modCutoff = cutoffHz_ + cutoffMod_ + keyOffset;
     modCutoff = constrain(modCutoff, 20.0f, 18000.0f);
     float fc = min(modCutoff, SAMPLE_RATE * 0.4f);  // More conservative
-    float gMod = 1.0f - expf(-2.0f * M_PI * fc / SAMPLE_RATE);
+    float gMod = 1.0f - fastExp(-2.0f * M_PI * fc / SAMPLE_RATE);
     cutoffMod_ = 0.0f;
     
     // Feedback - limit to prevent instability
