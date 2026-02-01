@@ -39,7 +39,7 @@ void DisplayManager::start() {
     xTaskCreatePinnedToCore(
         displayTaskWrapper,
         "DisplayTask",
-        4096,
+        8192,  // Increased stack size
         this,
         1,
         &displayTaskHandle_,

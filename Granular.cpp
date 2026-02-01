@@ -1,4 +1,5 @@
 #include "Granular.h"
+#include "Wavetables.h"
 #include <math.h>
 #include <string.h>
 
@@ -108,6 +109,9 @@ void GranularExciter::spawnGrain() {
 
 float GranularExciter::getWindow(float position, GrainWindow window) {
     // position: 0 to 1 through grain lifetime
+    if (position < 0.0f) position = 0.0f;
+    if (position > 1.0f) position = 1.0f;
+
     switch (window) {
         case GrainWindow::HANN: {
             int idx = (int)(position * (WINDOW_TABLE_SIZE - 1));

@@ -17,6 +17,8 @@ public:
         testMoogFilter();
         testEnvelope();
         testFM();
+        testSync();
+        testRingMod();
         Serial.println("--- ALL TESTS COMPLETED ---\n");
     }
 
@@ -48,7 +50,40 @@ private:
         bool passed = true;
         for (int i = 0; i < 1000; i++) {
             float modOut = modulator.process();
-            float sample = carrier.processWithFM(modOut, 1.0f);
+            float sample = carrier.processWithFM(modOut, 10.0f); // Deep FM
+            if (isnan(sample) || isinf(sample) || fabsf(sample) > 1.1f) {
+                passed = false;
+                break;
+            }
+        }
+        Serial.println(passed ? "PASSED" : "FAILED");
+    }
+
+    static void testSync() {
+        Serial.print("Testing Oscillator Sync... ");
+        SyncOsc sync;
+        sync.setMasterFreq(100.0f);
+        sync.setSlaveFreq(250.0f);
+
+        bool passed = true;
+        for (int i = 0; i < 1000; i++) {
+            float sample = sync.process();
+            if (isnan(sample) || isinf(sample) || fabsf(sample) > 1.1f) {
+                passed = false;
+                break;
+            }
+        }
+        Serial.println(passed ? "PASSED" : "FAILED");
+    }
+
+    static void testRingMod() {
+        Serial.print("Testing Ring Modulation... ");
+        RingMod rm;
+        rm.setFrequency(1000.0f);
+
+        bool passed = true;
+        for (int i = 0; i < 1000; i++) {
+            float sample = rm.process(0.5f * sinf(i * 0.1f));
             if (isnan(sample) || isinf(sample) || fabsf(sample) > 1.1f) {
                 passed = false;
                 break;

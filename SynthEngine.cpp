@@ -451,11 +451,12 @@ void SynthEngine::processBlock() {
         float vol = masterVolume_.process();
         sample *= vol;
         
-        // Hard clip
-        if (sample > 1.0f) sample = 1.0f;
-        if (sample < -1.0f) sample = -1.0f;
+        // Soft clip
+        if (sample > 1.2f) sample = 1.2f;
+        if (sample < -1.2f) sample = -1.2f;
+        sample = tanhf(sample);
         
-        int16_t sampleInt = (int16_t)(sample * 32000.0f);
+        int16_t sampleInt = (int16_t)(sample * 32767.0f);
         buffer[i * 2] = sampleInt;
         buffer[i * 2 + 1] = sampleInt;
     }
