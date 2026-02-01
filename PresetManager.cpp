@@ -165,6 +165,10 @@ PresetData PresetManager::getInitPreset() {
     p.glideTime = 0;
     p.masterVolume = 70;
     
+    p.filterType = (uint8_t)VoiceFilterType::SVF;
+    p.synthMode = (uint8_t)VoiceSynthMode::STANDARD;
+    p.fmAmount = 10; // 1.0
+
     return p;
 }
 
@@ -187,6 +191,7 @@ void PresetManager::loadFactoryPresets() {
     bass.ampDecay = 200;
     bass.ampSustain = 60;
     bass.filterDecay = 300;
+    bass.filterType = (uint8_t)VoiceFilterType::LADDER;
     savePreset(1, bass);
     
     // Preset 2: Supersaw Pad
@@ -237,6 +242,16 @@ void PresetManager::loadFactoryPresets() {
     arp.delayTime = 187;  // Dotted eighth at 120bpm
     arp.delayFeedback = 50;
     savePreset(4, arp);
+
+    // Preset 5: FM Lead
+    PresetData fm = getInitPreset();
+    strncpy(fm.name, "FM Lead", 15);
+    fm.synthMode = (uint8_t)VoiceSynthMode::FM;
+    fm.fmAmount = 80; // 8.0
+    fm.osc1Wave = (uint8_t)Waveform::SINE;
+    fm.osc2Wave = (uint8_t)Waveform::SINE;
+    fm.filterCutoff = 5000;
+    savePreset(5, fm);
     
     Serial.println("[Presets] Factory presets loaded");
 }

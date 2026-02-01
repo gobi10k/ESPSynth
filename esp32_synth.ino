@@ -59,8 +59,45 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
         case MIDI_CC::ATTACK:
             synth.setAmpADSR(val * 0.02f, -1, -1, -1);  // -1 = unchanged
             break;
+        case MIDI_CC::DECAY:
+            synth.setAmpADSR(-1, val * 0.02f, -1, -1);
+            break;
+        case MIDI_CC::SUSTAIN_LEVEL:
+            synth.setAmpADSR(-1, -1, val / 127.0f, -1);
+            break;
         case MIDI_CC::RELEASE:
             synth.setAmpADSR(-1, -1, -1, val * 0.02f);
+            break;
+        case MIDI_CC::REVERB_SEND:
+            synth.getReverb().setMix(val / 127.0f);
+            if (val > 0) synth.getReverb().setEnabled(true);
+            break;
+        case MIDI_CC::DELAY_SEND:
+            synth.getEffects().delay.setMix(val / 127.0f);
+            break;
+        case MIDI_CC::CHORUS_SEND:
+            synth.getEffects().chorus.setMix(val / 127.0f);
+            break;
+        case MIDI_CC::OSC_MIX:
+            synth.setOscMix(val / 127.0f);
+            break;
+        case MIDI_CC::OSC1_WAVE:
+            synth.setOscWaveform(0, (Waveform)(val % 7));
+            break;
+        case MIDI_CC::OSC2_WAVE:
+            synth.setOscWaveform(1, (Waveform)(val % 7));
+            break;
+        case MIDI_CC::OSC2_DETUNE:
+            synth.setOscDetune(1, (val - 64) * 0.5f);
+            break;
+        case MIDI_CC::SYNTH_MODE:
+            synth.setSynthMode((VoiceSynthMode)(val % 4));
+            break;
+        case MIDI_CC::FM_AMOUNT:
+            synth.setFMAmount(val / 5.0f);
+            break;
+        case MIDI_CC::FILTER_TYPE:
+            synth.setFilterType((VoiceFilterType)(val % 2));
             break;
         case MIDI_CC::ALL_NOTES_OFF:
             synth.allNotesOff();
@@ -90,6 +127,9 @@ void applyPreset(const PresetData& p) {
     synth.setFilterCutoff(p.filterCutoff);
     synth.setFilterResonance(p.filterReso / 100.0f);
     synth.setFilterMode((FilterMode)p.filterMode);
+    synth.setFilterType((VoiceFilterType)p.filterType);
+    synth.setSynthMode((VoiceSynthMode)p.synthMode);
+    synth.setFMAmount(p.fmAmount / 10.0f);  // Scale 0-255 to 0-25.5
     synth.setFilterEnvAmount(p.filterEnvAmount / 100.0f);
     
     synth.setAmpADSR(p.ampAttack / 1000.0f, p.ampDecay / 1000.0f,
@@ -137,7 +177,14 @@ PresetData createPresetFromCurrent(const char* name) {
     p.osc2Wave = (uint8_t)synth.getOscWaveform(1);
     p.osc1Detune = (int8_t)synth.getOscDetune(0);
     p.osc2Detune = (int8_t)synth.getOscDetune(1);
-    // ... more params would go here
+    p.oscMix = (uint8_t)(synth.getOscMix() * 100.0f);
+
+    p.filterCutoff = (uint16_t)synth.getFilterCutoff();
+    p.filterReso = (uint8_t)(synth.getFilterResonance() * 100.0f);
+    p.filterMode = (uint8_t)synth.getFilterMode();
+    p.filterType = (uint8_t)synth.getFilterType();
+    p.synthMode = (uint8_t)synth.getSynthMode();
+    p.fmAmount = (uint8_t)(synth.getFMAmount() * 10.0f);
     
     p.effectFlags = (satEnabled ? 1 : 0) | (chorusEnabled ? 2 : 0) | (delayEnabled ? 4 : 0);
     
@@ -203,6 +250,8 @@ void printHelp() {
     Serial.println("  d1<cents>  Osc1 detune");
     Serial.println("  d2<cents>  Osc2 detune");
     Serial.println("  om<0-99>   Osc mix %");
+    Serial.println("  sm<0-3>    Synth mode (std/fm/sync/ring)");
+    Serial.println("  sa<val>    FM amount");
     Serial.println("");
     Serial.println("-- Filter --");
     Serial.println("  ft<0-3>    Type (SVF/Ladder/Resonator/Comb)");
@@ -475,6 +524,12 @@ void processCommand(const String& cmd) {
             } else if (c1 == 'd') {
                 synth.getEffects().saturation.setDrive(value);
                 Serial.printf("Drive: %.1f\n", value);
+            } else if (c1 == 'm') {
+                synth.setSynthMode((VoiceSynthMode)((int)value % 4));
+                Serial.printf("Synth mode: %s\n", VOICE_SYNTH_MODE_NAMES[(int)value % 4]);
+            } else if (c1 == 'a') {
+                synth.setFMAmount(value);
+                Serial.printf("FM amount: %.1f\n", value);
             }
             break;
         case 'C':

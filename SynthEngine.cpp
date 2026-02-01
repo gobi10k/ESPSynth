@@ -15,9 +15,12 @@ SynthEngine::SynthEngine() :
     glideTime_(0.0f),
     pitchBendRange_(2),
     lastArpGate_(false),
+    synthMode_(VoiceSynthMode::STANDARD),
+    fmAmount_(1.0f),
     resonatorEnabled_(false),
     combEnabled_(false),
     granularMix_(0.0f),
+    currentVelocity_(0.0f),
     running_(false),
     audioTaskHandle_(nullptr)
 {
@@ -154,6 +157,8 @@ int SynthEngine::allocateVoice(uint8_t note) {
 }
 
 void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
+    currentVelocity_ = velocity / 127.0f;
+
     // If arpeggiator is on, feed it instead
     if (arp_.getMode() != ArpMode::OFF) {
         arp_.noteOn(note, velocity);
@@ -185,6 +190,8 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
     voices_[voice].setOscWaveform(0, oscWaveforms_[0]);
     voices_[voice].setOscWaveform(1, oscWaveforms_[1]);
     voices_[voice].setOscMix(oscMix_);
+    voices_[voice].setSynthMode(synthMode_);
+    voices_[voice].setFMAmount(fmAmount_);
     voices_[voice].setFilterCutoff(filterCutoff_);
     voices_[voice].setFilterResonance(filterReso_);
     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
@@ -248,6 +255,20 @@ void SynthEngine::setOscMix(float mix) {
     oscMix_ = constrain(mix, 0.0f, 1.0f);
     for (int i = 0; i < NUM_VOICES; i++) {
         voices_[i].setOscMix(mix);
+    }
+}
+
+void SynthEngine::setSynthMode(VoiceSynthMode mode) {
+    synthMode_ = mode;
+    for (int i = 0; i < NUM_VOICES; i++) {
+        voices_[i].setSynthMode(mode);
+    }
+}
+
+void SynthEngine::setFMAmount(float amount) {
+    fmAmount_ = amount;
+    for (int i = 0; i < NUM_VOICES; i++) {
+        voices_[i].setFMAmount(amount);
     }
 }
 
@@ -356,6 +377,8 @@ void SynthEngine::processBlock() {
                     voices_[voice].setOscDetune(0, oscDetune_[0]);
                     voices_[voice].setOscDetune(1, oscDetune_[1]);
                     voices_[voice].setOscMix(oscMix_);
+                    voices_[voice].setSynthMode(synthMode_);
+                    voices_[voice].setFMAmount(fmAmount_);
                     voices_[voice].setFilterType(filterType_);
                     voices_[voice].setFilterCutoff(filterCutoff_);
                     voices_[voice].setFilterResonance(filterReso_);
@@ -364,6 +387,7 @@ void SynthEngine::processBlock() {
                     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
                     voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
                     voices_[voice].setGlideTime(glideTime_);
+                    currentVelocity_ = arp_.getCurrentVelocity() / 127.0f;
                     voices_[voice].noteOn(arp_.getCurrentNote(), arp_.getCurrentVelocity());
                 }
             }
@@ -379,18 +403,22 @@ void SynthEngine::processBlock() {
             lastArpGate_ = arp_.isGateOn();
         }
         
-        // LFO and mod matrix disabled for debugging
-        // float lfo1 = lfos_[0].process();
-        // float lfo2 = lfos_[1].process();
-        // modMatrix_.setSourceValue(ModSource::LFO1, lfo1);
-        // modMatrix_.setSourceValue(ModSource::LFO2, lfo2);
-        // modMatrix_.process();
-        // float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
+        // Re-enable LFO and Mod Matrix
+        float lfo1 = lfos_[0].process();
+        float lfo2 = lfos_[1].process();
+        modMatrix_.setSourceValue(ModSource::LFO1, lfo1);
+        modMatrix_.setSourceValue(ModSource::LFO2, lfo2);
+        modMatrix_.setSourceValue(ModSource::VELOCITY, currentVelocity_);
+        modMatrix_.process();
+        float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
+        float pitchMod = modMatrix_.getModulation(ModDest::OSC_PITCH) * 2.0f;
         
-        // Mix all voices - SIMPLIFIED
+        // Mix all voices
         float sample = 0.0f;
         for (int v = 0; v < NUM_VOICES; v++) {
             if (voices_[v].isActive()) {
+                voices_[v].setGlobalFilterMod(filterMod);
+                voices_[v].setGlobalPitchMod(pitchMod);
                 float voiceSample = voices_[v].process();
                 // Safety clamp
                 if (voiceSample > 1.0f) voiceSample = 1.0f;
@@ -402,10 +430,10 @@ void SynthEngine::processBlock() {
         // Scale down for mixing
         sample *= 0.3f;
         
-        // BYPASS ALL EFFECTS FOR NOW
-        // sample = effects_.process(sample);
-        // sample = reverb_.process(sample);
-        // sample = compressor_.process(sample);
+        // Re-enable effects
+        sample = effects_.process(sample);
+        sample = reverb_.process(sample);
+        sample = compressor_.process(sample);
         
         // Master volume
         float vol = masterVolume_.process();

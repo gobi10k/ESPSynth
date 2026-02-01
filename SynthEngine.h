@@ -16,7 +16,7 @@
 #include "Resonator.h"
 #include "CombFilter.h"
 
-constexpr uint8_t NUM_VOICES = 2;
+constexpr uint8_t NUM_VOICES = 4;
 
 class SynthEngine {
 public:
@@ -44,6 +44,13 @@ public:
     
     Waveform getOscWaveform(int osc) const { return oscWaveforms_[osc]; }
     float getOscDetune(int osc) const { return oscDetune_[osc]; }
+    float getOscMix() const { return oscMix_; }
+
+    // Synthesis mode
+    void setSynthMode(VoiceSynthMode mode);
+    void setFMAmount(float amount);
+    VoiceSynthMode getSynthMode() const { return synthMode_; }
+    float getFMAmount() const { return fmAmount_; }
     
     // Global filter
     void setFilterCutoff(float hz);
@@ -112,6 +119,8 @@ private:
     float oscDetune_[2];
     float oscMix_;
     float pulseWidth_[2];
+    VoiceSynthMode synthMode_;
+    float fmAmount_;
     
     float filterCutoff_;
     float filterReso_;
@@ -158,6 +167,7 @@ private:
     SmoothedValue masterVolume_;
     
     // Runtime
+    float currentVelocity_;
     volatile bool running_;
     TaskHandle_t audioTaskHandle_;
 };

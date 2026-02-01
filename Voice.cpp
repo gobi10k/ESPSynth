@@ -2,6 +2,7 @@
 #include <math.h>
 
 const char* VOICE_FILTER_NAMES[] = {"SVF", "LADR"};
+const char* VOICE_SYNTH_MODE_NAMES[] = {"STD", "FM", "SYNC", "RING"};
 
 Voice::Voice() :
     state_(VoiceState::FREE),
@@ -9,8 +10,13 @@ Voice::Voice() :
     velocity_(0),
     age_(0),
     oscMix_(0.5f),
+    synthMode_(VoiceSynthMode::STANDARD),
+    fmAmount_(1.0f),
+    prevPhase_(0.0f),
     filterType_(VoiceFilterType::SVF),
     filterEnvAmount_(0.5f),
+    globalFilterMod_(0.0f),
+    globalPitchMod_(0.0f),
     targetFreq_(440.0f)
 {
     osc_[0].setWaveform(Waveform::SAW);
@@ -82,21 +88,65 @@ float Voice::process() {
         freq = 440.0f;
     }
     
+    // Apply global pitch modulation
+    osc_[0].setPitchMod(globalPitchMod_);
+    osc_[1].setPitchMod(globalPitchMod_);
+
     // Set oscillator frequencies
     osc_[0].setFrequency(freq);
     osc_[1].setFrequency(freq);
     
-    // Get oscillator output - just use osc 0 for simplicity
-    float sample = osc_[0].process();
+    float oscOutput = 0.0f;
     
-    // Safety check
-    if (isnan(sample) || isinf(sample)) {
-        sample = 0.0f;
+    switch (synthMode_) {
+        case VoiceSynthMode::STANDARD: {
+            float osc0 = osc_[0].process();
+            float osc1 = osc_[1].process();
+            oscOutput = (osc0 * (1.0f - oscMix_)) + (osc1 * oscMix_);
+            break;
+        }
+        case VoiceSynthMode::FM: {
+            // Oscillator 1 modulates Oscillator 0
+            float modulator = osc_[1].process();
+            oscOutput = osc_[0].processWithFM(modulator, fmAmount_);
+            break;
+        }
+        case VoiceSynthMode::RING: {
+            float osc0 = osc_[0].process();
+            float osc1 = osc_[1].process();
+            oscOutput = osc0 * osc1;
+            break;
+        }
+        case VoiceSynthMode::SYNC: {
+            // Oscillator 0 resets Oscillator 1 phase
+            float osc0 = osc_[0].process();
+            if (osc_[0].getPhase() < prevPhase_) {
+                osc_[1].sync();
+            }
+            prevPhase_ = osc_[0].getPhase();
+            float osc1 = osc_[1].process();
+            oscOutput = (osc0 * (1.0f - oscMix_)) + (osc1 * oscMix_);
+            break;
+        }
+        default:
+            oscOutput = osc_[0].process();
     }
-    if (sample > 1.0f) sample = 1.0f;
-    if (sample < -1.0f) sample = -1.0f;
+
+    float sample = oscOutput;
+
+    // Apply filter with envelope modulation
+    float filterEnvVal = filterEnv_.process();
+    float cutoffMod = (filterEnvVal * filterEnvAmount_ + globalFilterMod_) * 5000.0f;
+
+    if (filterType_ == VoiceFilterType::SVF) {
+        svf_.setCutoffMod(cutoffMod);
+        sample = svf_.process(sample);
+    } else {
+        ladder_.setCutoffMod(cutoffMod);
+        sample = ladder_.process(sample);
+    }
     
-    // Simple envelope
+    // Apply amplitude envelope
     float ampEnvVal = ampEnv_.process();
     if (isnan(ampEnvVal) || isinf(ampEnvVal)) {
         ampEnvVal = 0.0f;
@@ -105,6 +155,13 @@ float Voice::process() {
     float velScale = velocity_ / 127.0f;
     sample *= ampEnvVal * velScale;
     
+    // Safety check
+    if (isnan(sample) || isinf(sample)) {
+        sample = 0.0f;
+    }
+    if (sample > 1.0f) sample = 1.0f;
+    if (sample < -1.0f) sample = -1.0f;
+
     // Check if voice should be freed
     if (state_ == VoiceState::RELEASING && !ampEnv_.isActive()) {
         state_ = VoiceState::FREE;
@@ -127,6 +184,14 @@ void Voice::setOscDetune(int osc, float cents) {
 
 void Voice::setOscMix(float mix) {
     oscMix_ = constrain(mix, 0.0f, 1.0f);
+}
+
+void Voice::setSynthMode(VoiceSynthMode mode) {
+    synthMode_ = mode;
+}
+
+void Voice::setFMAmount(float amount) {
+    fmAmount_ = amount;
 }
 
 void Voice::setFilterType(VoiceFilterType type) {

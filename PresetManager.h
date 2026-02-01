@@ -77,7 +77,10 @@ struct PresetData {
     uint8_t masterVolume;
     
     // Padding for future use
-    uint8_t reserved[16];
+    uint8_t filterType;
+    uint8_t synthMode;
+    uint8_t fmAmount;
+    uint8_t reserved[13];
     
     uint32_t checksum;
 };

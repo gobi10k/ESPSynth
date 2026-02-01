@@ -28,8 +28,25 @@ namespace MIDI_CC {
     constexpr uint8_t FILTER_RESO = 71;
     constexpr uint8_t ATTACK = 73;
     constexpr uint8_t DECAY = 75;
-    constexpr uint8_t SUSTAIN_LEVEL = 79;
+    constexpr uint8_t SUSTAIN_LEVEL = 70; // Changed to 70 as per roadmap
     constexpr uint8_t RELEASE = 72;
+
+    // Effects
+    constexpr uint8_t REVERB_SEND = 91;
+    constexpr uint8_t DELAY_SEND = 94;
+    constexpr uint8_t CHORUS_SEND = 93;
+
+    // Oscillator
+    constexpr uint8_t OSC_MIX = 12;
+    constexpr uint8_t OSC1_WAVE = 14;
+    constexpr uint8_t OSC2_WAVE = 15;
+    constexpr uint8_t OSC2_DETUNE = 16;
+
+    // Synth
+    constexpr uint8_t SYNTH_MODE = 20;
+    constexpr uint8_t FM_AMOUNT = 21;
+    constexpr uint8_t FILTER_TYPE = 22;
+
     constexpr uint8_t ALL_NOTES_OFF = 123;
 }
 

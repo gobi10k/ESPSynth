@@ -21,7 +21,16 @@ enum class VoiceFilterType : uint8_t {
     NUM_TYPES
 };
 
+enum class VoiceSynthMode : uint8_t {
+    STANDARD = 0,
+    FM,
+    SYNC,
+    RING,
+    NUM_MODES
+};
+
 extern const char* VOICE_FILTER_NAMES[];
+extern const char* VOICE_SYNTH_MODE_NAMES[];
 
 class Voice {
 public:
@@ -46,6 +55,10 @@ public:
     void setOscDetune(int osc, float cents);
     void setOscMix(float mix);
     
+    // Synth mode
+    void setSynthMode(VoiceSynthMode mode);
+    void setFMAmount(float amount);
+
     // Filter selection and params
     void setFilterType(VoiceFilterType type);
     void setFilterCutoff(float hz);
@@ -57,6 +70,10 @@ public:
     void setAmpADSR(float a, float d, float s, float r);
     void setFilterADSR(float a, float d, float s, float r);
     
+    // Modulation
+    void setGlobalFilterMod(float mod) { globalFilterMod_ = mod; }
+    void setGlobalPitchMod(float mod) { globalPitchMod_ = mod; }
+
     // Glide
     void setGlideTime(float ms);
 
@@ -72,12 +89,21 @@ private:
     Oscillator osc_[2];
     float oscMix_;
     
+    // Synth mode
+    VoiceSynthMode synthMode_;
+    float fmAmount_;
+    float prevPhase_;
+
     // Filter options (only SVF and Ladder per voice - both are small)
     VoiceFilterType filterType_;
     Filter svf_;
     LadderFilter ladder_;
     float filterEnvAmount_;
     
+    // Modulation
+    float globalFilterMod_;
+    float globalPitchMod_;
+
     // Envelopes
     Envelope ampEnv_;
     Envelope filterEnv_;
