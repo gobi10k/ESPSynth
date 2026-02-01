@@ -7,6 +7,7 @@
 #include "MoogFilter.h"
 #include "Envelope.h"
 #include "ModMatrix.h"
+#include "Synthesis.h"
 #include <Arduino.h>
 
 class SynthesisTests {

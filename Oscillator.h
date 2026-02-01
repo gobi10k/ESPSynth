@@ -3,6 +3,7 @@
 
 #include "Config.h"
 #include "Wavetables.h"
+#include "MathUtils.h"
 
 class Oscillator {
 public:

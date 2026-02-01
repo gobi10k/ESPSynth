@@ -636,20 +636,32 @@ void processCommand(const String& cmd) {
             SynthesisTests::runAll();
             break;
         case 'S':
-            Serial.println("Starting Stress Test (All systems GO)...");
+            Serial.println("Starting Stress Test (Gradual All systems GO)...");
             synth.setSynthMode(VoiceSynthMode::FM);
             synth.setFMAmount(5.0f);
+
+            // Enable effects one by one with delay
+            Serial.println("  Enabling basic effects...");
             synth.getEffects().setEnabled(true, true, true);
+            delay(500);
+
+            Serial.println("  Enabling master effects...");
             synth.getReverb().setEnabled(true);
             synth.getCompressor().setEnabled(true);
+            delay(500);
+
+            Serial.println("  Enabling spectral modules...");
             synth.setResonatorEnabled(true);
             synth.setCombEnabled(true);
             synth.setGranularEnabled(true);
+            delay(500);
+
             for (int i = 0; i < NUM_VOICES; i++) {
-                Serial.printf("Triggering voice %d\n", i);
+                Serial.printf("  Triggering voice %d (Note %d)...\n", i, 48 + i * 7);
                 synth.noteOn(48 + i * 7, 100);
-                delay(100);
+                delay(1000); // 1 second between notes for stability monitoring
             }
+            Serial.println("Stress Test running.");
             break;
         case 'V':
             Serial.println("Stopping All Notes & Disabling Heavy FX");

@@ -114,7 +114,7 @@ float Oscillator::process() {
     // Apply pitch modulation
     uint32_t effectiveIncrement = basePhaseIncrement_;
     if (pitchMod_ != 0.0f) {
-        float pitchMult = powf(2.0f, pitchMod_ / 12.0f);
+        float pitchMult = fastExp2(pitchMod_ / 12.0f);
         effectiveIncrement = (uint32_t)(basePhaseIncrement_ * pitchMult);
     }
     
@@ -167,18 +167,20 @@ float Oscillator::process() {
 
 float Oscillator::processWithFM(float fmInput, float fmAmount) {
     // FM synthesis: modulate phase increment
-    // Use signed math to handle negative fmInput correctly
-    int32_t fmOffset = (int32_t)(fmInput * fmAmount * (float)basePhaseIncrement_);
-    int32_t totalIncrement = (int32_t)basePhaseIncrement_ + fmOffset;
+    // Use float math first to avoid early overflow, then clamp
+    float fmOffset = fmInput * fmAmount * (float)basePhaseIncrement_;
+    float totalIncrement = (float)basePhaseIncrement_ + fmOffset;
 
-    // Clamp to non-negative to avoid backwards phase motion/wild noise
-    if (totalIncrement < 0) totalIncrement = 0;
+    // Clamp to non-negative and reasonable max (2x Nyquist)
+    if (totalIncrement < 0.0f) totalIncrement = 0.0f;
+    if (totalIncrement > (float)PHASE_MAX * 0.5f) totalIncrement = (float)PHASE_MAX * 0.5f;
+
     uint32_t effectiveIncrement = (uint32_t)totalIncrement;
     
     // Apply pitch mod on top
     if (pitchMod_ != 0.0f) {
-        float pitchMult = powf(2.0f, pitchMod_ / 12.0f);
-        effectiveIncrement = (uint32_t)(effectiveIncrement * pitchMult);
+        float pitchMult = fastExp2(pitchMod_ / 12.0f);
+        effectiveIncrement = (uint32_t)((float)effectiveIncrement * pitchMult);
     }
     
     float sample = 0.0f;

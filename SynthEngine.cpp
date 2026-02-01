@@ -1,5 +1,6 @@
 #include "SynthEngine.h"
 #include "Wavetables.h"
+#include "MathUtils.h"
 #include <driver/i2s.h>
 #include <math.h>
 
@@ -123,11 +124,9 @@ int SynthEngine::findVoiceForNote(uint8_t note) {
 }
 
 int SynthEngine::allocateVoice(uint8_t note) {
-    Serial.printf("  allocateVoice for note %d\n", note);
     // First: find a free voice
     for (int i = 0; i < NUM_VOICES; i++) {
         if (voices_[i].isFree()) {
-            Serial.printf("  found free voice %d\n", i);
             return i;
         }
     }
@@ -142,7 +141,6 @@ int SynthEngine::allocateVoice(uint8_t note) {
         }
     }
     if (oldestReleasing >= 0) {
-        Serial.printf("  stealing releasing voice %d\n", oldestReleasing);
         voices_[oldestReleasing].forceOff();
         return oldestReleasing;
     }
@@ -156,13 +154,11 @@ int SynthEngine::allocateVoice(uint8_t note) {
             oldest = i;
         }
     }
-    Serial.printf("  stealing active voice %d\n", oldest);
     voices_[oldest].forceOff();
     return oldest;
 }
 
 void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
-    Serial.printf("SynthEngine::noteOn note:%d vel:%d\n", note, velocity);
     currentVelocity_ = velocity / 127.0f;
 
     // If arpeggiator is on, feed it instead
@@ -189,9 +185,7 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
         resonator_.setFrequency(midiToFreq(note));
     }
 
-    Serial.println("  calling noteOn on voice");
     voices_[voice].noteOn(note, velocity);
-    Serial.println("  noteOn complete");
 }
 
 void SynthEngine::noteOff(uint8_t note) {
@@ -447,19 +441,21 @@ void SynthEngine::processBlock() {
             sample = comb_.process(sample);
         }
         
+        if (isnan(sample) || isinf(sample)) sample = 0.0f;
+
         // Re-enable effects
         sample = effects_.process(sample);
         sample = reverb_.process(sample);
         sample = compressor_.process(sample);
         
+        if (isnan(sample) || isinf(sample)) sample = 0.0f;
+
         // Master volume
         float vol = masterVolume_.process();
         sample *= vol;
         
-        // Soft clip
-        if (sample > 1.2f) sample = 1.2f;
-        if (sample < -1.2f) sample = -1.2f;
-        sample = tanhf(sample);
+        // Soft clip using fast approximation
+        sample = fastTanh(sample);
         
         int16_t sampleInt = (int16_t)(sample * 32767.0f);
         buffer[i * 2] = sampleInt;

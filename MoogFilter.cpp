@@ -42,6 +42,8 @@ void MoogFilter::reset() {
 }
 
 float MoogFilter::process(float input) {
+    if (isnan(input) || isinf(input)) input = 0.0f;
+
     // Apply cutoff modulation
     float modCutoff = cutoffHz_ + cutoffMod_;
     modCutoff = constrain(modCutoff, 20.0f, 20000.0f);
@@ -73,6 +75,11 @@ float MoogFilter::process(float input) {
     // Output saturation
     output = saturate(output);
     
+    if (isnan(output) || isinf(output)) {
+        reset();
+        return 0.0f;
+    }
+
     return output / drive_;
 }
 
@@ -224,5 +231,10 @@ float LadderFilter::process(float input) {
     if (output > 1.0f) output = 1.0f;
     if (output < -1.0f) output = -1.0f;
     
+    if (isnan(output) || isinf(output)) {
+        reset();
+        return 0.0f;
+    }
+
     return output / drive_;
 }
