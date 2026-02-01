@@ -33,13 +33,21 @@ public:
     }
 
     void printStats() {
-        if (sampleCount_ == 0) return;
+        if (sampleCount_ == 0) {
+            Serial.println("Profiler: No data collected");
+            return;
+        }
         uint32_t avgTime = totalTime_ / sampleCount_;
         float blockDurationUs = (DMA_BUFFER_SAMPLES * 1000000.0f) / SAMPLE_RATE;
         float cpuPercent = (avgTime / blockDurationUs) * 100.0f;
 
         Serial.printf("Audio CPU: %.1f%% (avg: %luus, max: %luus, min: %luus) over %lu blocks\n",
                       cpuPercent, avgTime, maxTime_, minTime_, sampleCount_);
+
+        if (maxTime_ > blockDurationUs) {
+            Serial.printf("WARNING: Task Overflow! Max time %luus exceeds block duration %.0fus\n",
+                          maxTime_, blockDurationUs);
+        }
         reset();
     }
 
@@ -154,6 +162,10 @@ public:
     // Voice info
     uint8_t getActiveVoiceCount() const;
     Voice& getVoice(int i) { return voices_[i]; }
+
+    static float midiToFreq(uint8_t note) {
+        return 440.0f * powf(2.0f, (note - 69) / 12.0f);
+    }
 
 private:
     void processBlock();

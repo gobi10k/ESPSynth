@@ -16,6 +16,7 @@ public:
         testFilter();
         testMoogFilter();
         testEnvelope();
+        testFM();
         Serial.println("--- ALL TESTS COMPLETED ---\n");
     }
 
@@ -30,6 +31,25 @@ private:
         for (int i = 0; i < 1000; i++) {
             float sample = osc.process();
             if (isnan(sample) || isinf(sample) || sample < -1.1f || sample > 1.1f) {
+                passed = false;
+                break;
+            }
+        }
+        Serial.println(passed ? "PASSED" : "FAILED");
+    }
+
+    static void testFM() {
+        Serial.print("Testing FM synthesis... ");
+        Oscillator carrier;
+        Oscillator modulator;
+        carrier.setFrequency(440.0f);
+        modulator.setFrequency(220.0f);
+
+        bool passed = true;
+        for (int i = 0; i < 1000; i++) {
+            float modOut = modulator.process();
+            float sample = carrier.processWithFM(modOut, 1.0f);
+            if (isnan(sample) || isinf(sample) || fabsf(sample) > 1.1f) {
                 passed = false;
                 break;
             }

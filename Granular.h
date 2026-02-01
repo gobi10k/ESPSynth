@@ -47,6 +47,7 @@ struct Grain {
 };
 
 constexpr uint8_t MAX_GRAINS = 8;
+constexpr uint16_t WINDOW_TABLE_SIZE = 256;
 
 class GranularExciter {
 public:
@@ -87,6 +88,18 @@ private:
     float getWindow(float position, GrainWindow window);
     float getSourceSample(Grain& grain);
     
+    // Fast PRNG
+    uint32_t fastRand() {
+        noiseState_ ^= noiseState_ << 13;
+        noiseState_ ^= noiseState_ >> 17;
+        noiseState_ ^= noiseState_ << 5;
+        return noiseState_;
+    }
+
+    float fastRandFloat() {
+        return (float)(fastRand() & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+    }
+
     // Parameters
     float density_;
     float durationMs_;
@@ -101,6 +114,10 @@ private:
     // Grain pool
     Grain grains_[MAX_GRAINS];
     
+    // Window table
+    static float hannTable_[WINDOW_TABLE_SIZE];
+    static bool tablesInitialized_;
+
     // Timing
     float samplesPerGrain_;
     float sampleCounter_;

@@ -96,7 +96,7 @@ void SynthEngine::start() {
     xTaskCreatePinnedToCore(
         audioTaskWrapper,
         "SynthTask",
-        16384,  // Increased stack size
+        20480,  // Further increased stack size to 20KB
         this,
         configMAX_PRIORITIES - 1,
         &audioTaskHandle_,
@@ -179,6 +179,11 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
     voices_[voice].setFilterResonance(filterReso_);
     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
     
+    // Melodic tracking for resonator
+    if (resonatorEnabled_) {
+        resonator_.setFrequency(midiToFreq(note));
+    }
+
     Serial.println("  calling noteOn on voice");
     voices_[voice].noteOn(note, velocity);
     Serial.println("  noteOn complete");
@@ -376,6 +381,11 @@ void SynthEngine::processBlock() {
                     voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
                     voices_[voice].setGlideTime(glideTime_);
                     currentVelocity_ = arp_.getCurrentVelocity() / 127.0f;
+
+                    if (resonatorEnabled_) {
+                        resonator_.setFrequency(midiToFreq(arp_.getCurrentNote()));
+                    }
+
                     voices_[voice].noteOn(arp_.getCurrentNote(), arp_.getCurrentVelocity());
                 }
             }

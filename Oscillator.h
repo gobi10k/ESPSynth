@@ -9,7 +9,7 @@ public:
     Oscillator();
     
     // Basic parameters
-    void setFrequency(float freq);
+    void setFrequency(float freq, bool force = false);
     void setWaveform(Waveform wf);
     void setAmplitude(float amp);
     void setDetune(float cents);      // Detune in cents (-100 to +100)

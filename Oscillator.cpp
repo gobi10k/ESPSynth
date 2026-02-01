@@ -35,7 +35,9 @@ Oscillator::Oscillator() :
     setFrequency(440.0f);
 }
 
-void Oscillator::setFrequency(float freq) {
+void Oscillator::setFrequency(float freq, bool force) {
+    if (!force && fabsf(freq - baseFrequency_) < 0.001f) return;
+
     baseFrequency_ = constrain(freq, 20.0f, 20000.0f);
     frequency_ = baseFrequency_ * detuneMultiplier_;
     updatePhaseIncrement();
@@ -167,7 +169,11 @@ float Oscillator::processWithFM(float fmInput, float fmAmount) {
     // FM synthesis: modulate phase increment
     // Use signed math to handle negative fmInput correctly
     int32_t fmOffset = (int32_t)(fmInput * fmAmount * (float)basePhaseIncrement_);
-    uint32_t effectiveIncrement = (uint32_t)((int32_t)basePhaseIncrement_ + fmOffset);
+    int32_t totalIncrement = (int32_t)basePhaseIncrement_ + fmOffset;
+
+    // Clamp to non-negative to avoid backwards phase motion/wild noise
+    if (totalIncrement < 0) totalIncrement = 0;
+    uint32_t effectiveIncrement = (uint32_t)totalIncrement;
     
     // Apply pitch mod on top
     if (pitchMod_ != 0.0f) {
@@ -189,6 +195,19 @@ float Oscillator::processWithFM(float fmInput, float fmAmount) {
             break;
         case Waveform::TRIANGLE:
             sample = Wavetables::readTriangle(phase_, tableIndex_);
+            break;
+        case Waveform::PULSE: {
+            float t = phase_ * PHASE_TO_FLOAT;
+            sample = (t < pulseWidth_) ? 1.0f : -1.0f;
+            sample = lastPulse_ * 0.3f + sample * 0.7f;
+            lastPulse_ = sample;
+            break;
+        }
+        case Waveform::SUPERSAW:
+            sample = generateSupersaw();
+            break;
+        case Waveform::NOISE:
+            sample = generateNoise();
             break;
         default:
             sample = Wavetables::readSine(phase_);

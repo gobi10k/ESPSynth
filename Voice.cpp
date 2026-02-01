@@ -84,15 +84,12 @@ float Voice::process() {
     
     // Get frequency
     float freq = pitchSmooth_.process();
-    if (freq < 20.0f || freq > 20000.0f || isnan(freq) || isinf(freq)) {
-        freq = 440.0f;
-    }
     
     // Apply global pitch modulation
     osc_[0].setPitchMod(globalPitchMod_);
     osc_[1].setPitchMod(globalPitchMod_);
 
-    // Set oscillator frequencies
+    // Set oscillator frequencies (internal check avoids redundant work)
     osc_[0].setFrequency(freq);
     osc_[1].setFrequency(freq);
     
