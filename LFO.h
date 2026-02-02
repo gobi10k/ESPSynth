@@ -28,6 +28,7 @@ public:
     
     // Returns bipolar output (-1 to +1) * depth
     float process();
+    float process(int samples);
     
     // Returns unipolar output (0 to 1) * depth
     float processUnipolar();

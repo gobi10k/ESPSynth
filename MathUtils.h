@@ -3,6 +3,9 @@
 
 #include <Arduino.h>
 
+#define TWO_PI 6.28318530717958647693f
+#define TWO_PI_INV_SR -0.00013089969f // -2 * PI / 48000
+
 /**
  * Fast exponential approximation
  * e^x approx (1 + x/n)^n for n=256

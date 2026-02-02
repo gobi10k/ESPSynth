@@ -74,6 +74,7 @@ public:
     // Modulation
     void setGlobalFilterMod(float mod) { globalFilterMod_ = mod; }
     void setGlobalPitchMod(float mod) { globalPitchMod_ = mod; }
+    void updateBlockParams();
 
     // Glide
     void setGlideTime(float ms);
@@ -84,6 +85,7 @@ private:
     VoiceState state_;
     uint8_t note_;
     uint8_t velocity_;
+    float velScalar_;
     uint32_t age_;
     
     // Oscillators

@@ -45,6 +45,7 @@ float Voice::midiToFreq(uint8_t note) {
 void Voice::noteOn(uint8_t note, uint8_t velocity) {
     note_ = note;
     velocity_ = velocity;
+    velScalar_ = velocity / 127.0f;
     age_ = 0;
     state_ = VoiceState::ACTIVE;
     
@@ -83,16 +84,13 @@ float Voice::process() {
     
     age_++;
     
-    // Get frequency
-    float freq = pitchSmooth_.process();
-    
-    // Apply global pitch modulation
-    osc_[0].setPitchMod(globalPitchMod_);
-    osc_[1].setPitchMod(globalPitchMod_);
-
-    // Set oscillator frequencies (internal check avoids redundant work)
-    osc_[0].setFrequency(freq);
-    osc_[1].setFrequency(freq);
+    // Smooth frequency only if needed
+    float freq = targetFreq_;
+    if (pitchSmooth_.getSmoothTime() > 0.0f) {
+        freq = pitchSmooth_.process();
+        osc_[0].setFrequency(freq);
+        osc_[1].setFrequency(freq);
+    }
     
     float oscOutput = 0.0f;
     
@@ -134,25 +132,31 @@ float Voice::process() {
 
     // Apply filter with envelope modulation
     float filterEnvVal = filterEnv_.process();
-    float cutoffMod = (filterEnvVal * filterEnvAmount_ + globalFilterMod_) * 5000.0f;
+
+    // Update filter coefficients every 8 samples for performance
+    if ((age_ & 0x07) == 0) {
+        float cutoffMod = (filterEnvVal * filterEnvAmount_ + globalFilterMod_) * 5000.0f;
+        if (filterType_ == VoiceFilterType::SVF) {
+            svf_.updateCoefficients(cutoffMod);
+        } else {
+            ladder_.updateCoefficients(cutoffMod);
+        }
+    }
 
     if (filterType_ == VoiceFilterType::SVF) {
-        svf_.setCutoffMod(cutoffMod);
         sample = svf_.process(sample);
     } else {
-        ladder_.setCutoffMod(cutoffMod);
         sample = ladder_.process(sample);
     }
-    
+
     // Apply amplitude envelope
     float ampEnvVal = ampEnv_.process();
     if (isnan(ampEnvVal) || isinf(ampEnvVal)) {
         ampEnvVal = 0.0f;
     }
     
-    float velScale = velocity_ / 127.0f;
-    sample *= ampEnvVal * velScale;
-    
+    sample *= ampEnvVal * velScalar_;
+
     // Safety check
     if (isnan(sample) || isinf(sample)) {
         sample = 0.0f;
@@ -232,4 +236,17 @@ void Voice::setFilterADSR(float a, float d, float s, float r) {
 
 void Voice::setGlideTime(float ms) {
     pitchSmooth_.setSmoothTime(ms);
+}
+
+void Voice::updateBlockParams() {
+    if (state_ == VoiceState::FREE) return;
+
+    // Apply global modulations once per block
+    osc_[0].setPitchMod(globalPitchMod_);
+    osc_[1].setPitchMod(globalPitchMod_);
+
+    // Ensure oscillators are at right base frequency
+    float freq = (pitchSmooth_.getSmoothTime() > 0.0f) ? pitchSmooth_.getCurrent() : targetFreq_;
+    osc_[0].setFrequency(freq);
+    osc_[1].setFrequency(freq);
 }

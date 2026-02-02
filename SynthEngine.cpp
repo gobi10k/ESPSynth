@@ -354,14 +354,22 @@ void SynthEngine::processBlock() {
 
     // --- Control Rate Update (Once per 128 samples) ---
     // Massive CPU optimization: Move slow modulation out of the sample loop
-    float lfo1 = lfos_[0].process();
-    float lfo2 = lfos_[1].process();
+    float lfo1 = lfos_[0].process(DMA_BUFFER_SAMPLES);
+    float lfo2 = lfos_[1].process(DMA_BUFFER_SAMPLES);
     modMatrix_.setSourceValue(ModSource::LFO1, lfo1);
     modMatrix_.setSourceValue(ModSource::LFO2, lfo2);
     modMatrix_.setSourceValue(ModSource::VELOCITY, currentVelocity_);
     modMatrix_.process();
     float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
     float pitchMod = modMatrix_.getModulation(ModDest::OSC_PITCH) * 2.0f;
+
+    for (int v = 0; v < NUM_VOICES; v++) {
+        if (voices_[v].isActive()) {
+            voices_[v].setGlobalFilterMod(filterMod);
+            voices_[v].setGlobalPitchMod(pitchMod);
+            voices_[v].updateBlockParams();
+        }
+    }
     // --------------------------------------------------
     
     for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
@@ -416,8 +424,6 @@ void SynthEngine::processBlock() {
         float sample = 0.0f;
         for (int v = 0; v < NUM_VOICES; v++) {
             if (voices_[v].isActive()) {
-                voices_[v].setGlobalFilterMod(filterMod);
-                voices_[v].setGlobalPitchMod(pitchMod);
                 float voiceSample = voices_[v].process();
                 // Safety clamp
                 if (voiceSample > 1.0f) voiceSample = 1.0f;

@@ -85,11 +85,11 @@ float FDNReverb::process(float input) {
     // Pre-delay using safe index math
     int preReadPos = (int)preDelayPos_ - (int)preDelayTime_;
     if (preReadPos < 0) preReadPos += PREDELAY_MAX;
-    preReadPos %= PREDELAY_MAX;
 
     int16_t preDelayed = preDelayBuffer_[preReadPos];
     preDelayBuffer_[preDelayPos_] = (int16_t)(input * 32000.0f);
-    preDelayPos_ = (preDelayPos_ + 1) % PREDELAY_MAX;
+    preDelayPos_++;
+    if (preDelayPos_ >= PREDELAY_MAX) preDelayPos_ = 0;
     
     float preDelayedF = preDelayed / 32000.0f;
     
@@ -98,7 +98,6 @@ float FDNReverb::process(float input) {
     for (int i = 0; i < 4; i++) {
         int readPos = (int)writePos_[i] - (int)delayTimes_[i];
         if (readPos < 0) readPos += FDN_MAX_DELAY;
-        readPos %= FDN_MAX_DELAY;
 
         outputs[i] = delayLines_[i][readPos] / 32000.0f;
         
@@ -122,7 +121,8 @@ float FDNReverb::process(float input) {
         if (toWrite > 1.0f) toWrite = 1.0f;
         if (toWrite < -1.0f) toWrite = -1.0f;
         delayLines_[i][writePos_[i]] = (int16_t)(toWrite * 32000.0f);
-        writePos_[i] = (writePos_[i] + 1) % FDN_MAX_DELAY;
+        writePos_[i]++;
+        if (writePos_[i] >= FDN_MAX_DELAY) writePos_[i] = 0;
     }
     
     // Output sum

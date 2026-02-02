@@ -21,11 +21,15 @@ MoogFilter::MoogFilter() :
 
 void MoogFilter::setCutoff(float hz) {
     cutoffHz_ = constrain(hz, 20.0f, 20000.0f);
-    
-    // Calculate coefficient
-    // Using the formula: g = 1 - exp(-2 * pi * fc / fs)
-    float fc = min(cutoffHz_, SAMPLE_RATE * 0.45f);
-    g_ = 1.0f - fastExp(-2.0f * M_PI * fc / SAMPLE_RATE);
+    updateCoefficients(0.0f);
+}
+
+void MoogFilter::updateCoefficients(float modHz) {
+    float modCutoff = cutoffHz_ + modHz;
+    modCutoff = constrain(modCutoff, 20.0f, 20000.0f);
+    float fc = min(modCutoff, SAMPLE_RATE * 0.45f);
+    gMod_ = 1.0f - fastExp(TWO_PI_INV_SR * fc);
+    invGMod_ = 1.0f - gMod_;
 }
 
 void MoogFilter::setResonance(float res) {
@@ -43,13 +47,6 @@ void MoogFilter::reset() {
 
 float MoogFilter::process(float input) {
     if (isnan(input) || isinf(input)) input = 0.0f;
-
-    // Apply cutoff modulation
-    float modCutoff = cutoffHz_ + cutoffMod_;
-    modCutoff = constrain(modCutoff, 20.0f, 20000.0f);
-    float fc = min(modCutoff, SAMPLE_RATE * 0.45f);
-    float gMod = 1.0f - fastExp(-2.0f * M_PI * fc / SAMPLE_RATE);
-    cutoffMod_ = 0.0f;
     
     // Calculate feedback amount (resonance)
     // 4.0 is the maximum for self-oscillation
@@ -64,7 +61,7 @@ float MoogFilter::process(float input) {
     
     // Four cascaded one-pole lowpass filters
     for (int i = 0; i < 4; i++) {
-        stage_[i] = gMod * fastTanh(input) + (1.0f - gMod) * delay_[i];
+        stage_[i] = gMod_ * fastTanh(input) + invGMod_ * delay_[i];
         delay_[i] = stage_[i];
         input = stage_[i];
     }
@@ -104,8 +101,21 @@ LadderFilter::LadderFilter() :
 
 void LadderFilter::setCutoff(float hz) {
     cutoffHz_ = constrain(hz, 20.0f, 20000.0f);
-    float fc = min(cutoffHz_, SAMPLE_RATE * 0.45f);
-    g_ = 1.0f - fastExp(-2.0f * M_PI * fc / SAMPLE_RATE);
+    updateCoefficients(0.0f);
+}
+
+void LadderFilter::updateCoefficients(float modHz) {
+    // Apply key tracking
+    float keyOffset = 0.0f;
+    if (keyTracking_ > 0.0f) {
+        keyOffset = (keyFreq_ - 440.0f) * keyTracking_ * 2.0f;
+    }
+
+    float modCutoff = cutoffHz_ + modHz + keyOffset;
+    modCutoff = constrain(modCutoff, 20.0f, 18000.0f);
+    float fc = min(modCutoff, SAMPLE_RATE * 0.4f);
+    gMod_ = 1.0f - fastExp(TWO_PI_INV_SR * fc);
+    invGMod_ = 1.0f - gMod_;
 }
 
 void LadderFilter::setResonance(float res) {
@@ -177,19 +187,6 @@ float LadderFilter::process(float input) {
     // Safety check input
     if (isnan(input) || isinf(input)) input = 0.0f;
     
-    // Apply key tracking
-    float keyOffset = 0.0f;
-    if (keyTracking_ > 0.0f) {
-        keyOffset = (keyFreq_ - 440.0f) * keyTracking_ * 2.0f;
-    }
-    
-    // Apply cutoff modulation
-    float modCutoff = cutoffHz_ + cutoffMod_ + keyOffset;
-    modCutoff = constrain(modCutoff, 20.0f, 18000.0f);
-    float fc = min(modCutoff, SAMPLE_RATE * 0.4f);  // More conservative
-    float gMod = 1.0f - fastExp(-2.0f * M_PI * fc / SAMPLE_RATE);
-    cutoffMod_ = 0.0f;
-    
     // Feedback - limit to prevent instability
     float feedback = resonance_ * 3.5f;  // Reduced from 4.0
     
@@ -213,7 +210,7 @@ float LadderFilter::process(float input) {
         if (stageIn > 1.5f) stageIn = 1.5f;
         if (stageIn < -1.5f) stageIn = -1.5f;
         
-        stage_[i] = gMod * stageIn + (1.0f - gMod) * delay_[i];
+        stage_[i] = gMod_ * stageIn + invGMod_ * delay_[i];
         delay_[i] = stage_[i];
         stageIn = stage_[i];
     }

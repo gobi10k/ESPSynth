@@ -57,7 +57,8 @@ float Delay::process(float input) {
     float toWrite = input + delayed * feedback_;
     toWrite = constrain(toWrite, -1.0f, 1.0f);
     buffer_[writePos_] = (int16_t)(toWrite * 32767.0f);
-    writePos_ = (writePos_ + 1) % MAX_DELAY_SAMPLES;
+    writePos_++;
+    if (writePos_ >= MAX_DELAY_SAMPLES) writePos_ = 0;
     
     // Mix dry/wet
     return input * (1.0f - mix_) + delayed * mix_;
@@ -204,7 +205,8 @@ float Chorus::process(float input) {
     float s1 = buffer_[readPos1] / 32000.0f;
     float delayed = s0 * (1.0f - frac) + s1 * frac;
     
-    writePos_ = (writePos_ + 1) % CHORUS_BUFFER_SIZE;
+    writePos_++;
+    if (writePos_ >= CHORUS_BUFFER_SIZE) writePos_ = 0;
     
     return input * (1.0f - mix_) + delayed * mix_;
 }

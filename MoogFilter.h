@@ -33,6 +33,7 @@ public:
     
     // Modulation input (added to cutoff)
     void setCutoffMod(float mod) { cutoffMod_ = mod; }
+    void updateCoefficients(float modHz);
     
     float process(float input);
     void reset();
@@ -44,7 +45,8 @@ private:
     float cutoffMod_;
     
     // Filter coefficient
-    float g_;  // Cutoff coefficient
+    float gMod_;  // Current modulated coefficient
+    float invGMod_;
     
     // 4 stages of state
     float stage_[4];
@@ -88,6 +90,7 @@ public:
     
     void setCutoffMod(float mod) { cutoffMod_ = mod; }
     void setKeyFreq(float hz) { keyFreq_ = hz; }
+    void updateCoefficients(float modHz);
     
     float process(float input);
     void reset();
@@ -102,7 +105,8 @@ private:
     float cutoffMod_;
     
     // Filter coefficient
-    float g_;
+    float gMod_;
+    float invGMod_;
     
     // 4 stages
     float stage_[4];

@@ -33,6 +33,7 @@ public:
     
     // Modulation input - added to cutoff each sample
     void setCutoffMod(float mod) { cutoffMod_ = mod; }
+    void updateCoefficients(float modHz);
     
     float process(float input);
     
@@ -45,8 +46,6 @@ public:
     void reset();
 
 private:
-    void updateCoefficients();
-    
     float cutoffHz_;
     float resonance_;
     FilterMode mode_;
@@ -54,7 +53,7 @@ private:
     float cutoffMod_;
     
     // Filter coefficients
-    float f_;   // Frequency coefficient
+    float fMod_;   // Frequency coefficient
     float q_;   // Resonance coefficient
     
     // State variables
