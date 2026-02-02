@@ -644,7 +644,7 @@ void processCommand(const String& cmd) {
             SynthesisTests::runAll();
             break;
         case 'k':
-            Serial.println("Starting Sequential Module Stress Test...");
+            Serial.println("Starting Sequential Module Stress Test (Wait for it)...");
             Serial.flush();
 
             synth.allNotesOff();
@@ -656,56 +656,66 @@ void processCommand(const String& cmd) {
             synth.setGranularEnabled(false);
             delay(1000);
 
+            Serial.printf("Idle CPU: %.1f%%\n", synth.getCPUPercent());
             Serial.println("1. Triggering 4 voices (Clean)...");
             Serial.flush();
             for (int i = 0; i < NUM_VOICES; i++) {
-                Serial.printf("   - Voice %d\n", i);
+                Serial.printf("   - Voice %d (Note %d)\n", i, 48 + i * 5);
                 Serial.flush();
                 synth.noteOn(48 + i * 5, 80);
                 delay(200);
             }
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("2. Enabling Saturation...");
             Serial.flush();
             synth.getEffects().saturation.setMix(1.0f);
             synth.getEffects().setEnabled(true, false, false);
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("2b. Enabling Chorus...");
             Serial.flush();
             synth.getEffects().setEnabled(true, true, false);
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("2c. Enabling Delay...");
             Serial.flush();
             synth.getEffects().setEnabled(true, true, true);
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("3. Adding Reverb...");
             Serial.flush();
             synth.getReverb().setEnabled(true);
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("4. Adding Compressor...");
             Serial.flush();
             synth.getCompressor().setEnabled(true);
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("5. Adding Resonator...");
             Serial.flush();
             synth.setResonatorEnabled(true);
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("6. Adding Comb Filter...");
             Serial.flush();
             synth.setCombEnabled(true);
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("7. Adding Granular Exciter...");
             Serial.flush();
             synth.setGranularEnabled(true);
             delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
 
             Serial.println("Sequential stress test complete. Still alive!");
             Serial.flush();
@@ -740,11 +750,26 @@ void processCommand(const String& cmd) {
             Serial.println("Stress Test running.");
             break;
         case 'V':
-            Serial.println("Stopping All Notes & Disabling Heavy FX");
+            Serial.println("PANIC: Stopping All Notes & Resetting Engine");
             synth.allNotesOff();
             synth.setResonatorEnabled(false);
             synth.setCombEnabled(false);
             synth.setGranularEnabled(false);
+            synth.getEffects().setEnabled(false, false, false);
+            synth.getReverb().setEnabled(false);
+            synth.getCompressor().setEnabled(false);
+
+            // Hard reset of all recursive modules
+            synth.getResonator().reset();
+            synth.getComb().reset();
+            synth.getReverb().reset();
+            synth.getEffects().delay.clear();
+            synth.getEffects().chorus.clear();
+
+            for (int i = 0; i < NUM_VOICES; i++) {
+                synth.getVoice(i).forceOff();
+            }
+            Serial.println("Panic reset complete.");
             break;
         case 'm':
             Serial.printf("System Heap: %d bytes free\n", ESP.getFreeHeap());

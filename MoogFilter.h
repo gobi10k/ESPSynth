@@ -52,12 +52,6 @@ private:
     // Delay elements for feedback
     float delay_[4];
     
-    // Tanh approximation for saturation
-    inline float saturate(float x) {
-        // Fast tanh approximation
-        float x2 = x * x;
-        return x * (27.0f + x2) / (27.0f + 9.0f * x2);
-    }
 };
 
 /**
@@ -118,11 +112,6 @@ private:
     float taps_[5];
     
     void updateTaps();
-    
-    inline float saturate(float x) {
-        float x2 = x * x;
-        return x * (27.0f + x2) / (27.0f + 9.0f * x2);
-    }
 };
 
 #endif

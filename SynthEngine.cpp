@@ -351,6 +351,18 @@ uint8_t SynthEngine::getActiveVoiceCount() const {
 void SynthEngine::processBlock() {
     profiler_.startSample();
     blockCounter_++;
+
+    // --- Control Rate Update (Once per 128 samples) ---
+    // Massive CPU optimization: Move slow modulation out of the sample loop
+    float lfo1 = lfos_[0].process();
+    float lfo2 = lfos_[1].process();
+    modMatrix_.setSourceValue(ModSource::LFO1, lfo1);
+    modMatrix_.setSourceValue(ModSource::LFO2, lfo2);
+    modMatrix_.setSourceValue(ModSource::VELOCITY, currentVelocity_);
+    modMatrix_.process();
+    float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
+    float pitchMod = modMatrix_.getModulation(ModDest::OSC_PITCH) * 2.0f;
+    // --------------------------------------------------
     
     for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
         // Process arpeggiator (only if mode is not OFF and we have notes)
@@ -399,16 +411,6 @@ void SynthEngine::processBlock() {
             }
             lastArpGate_ = arp_.isGateOn();
         }
-        
-        // Re-enable LFO and Mod Matrix
-        float lfo1 = lfos_[0].process();
-        float lfo2 = lfos_[1].process();
-        modMatrix_.setSourceValue(ModSource::LFO1, lfo1);
-        modMatrix_.setSourceValue(ModSource::LFO2, lfo2);
-        modMatrix_.setSourceValue(ModSource::VELOCITY, currentVelocity_);
-        modMatrix_.process();
-        float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
-        float pitchMod = modMatrix_.getModulation(ModDest::OSC_PITCH) * 2.0f;
         
         // Mix all voices
         float sample = 0.0f;
@@ -462,9 +464,9 @@ void SynthEngine::processBlock() {
         blockBuffer_[i * 2 + 1] = sampleInt;
     }
     
+    profiler_.endSample();
     size_t bytesWritten;
     i2s_write(I2S_NUM_0, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
-    profiler_.endSample();
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {

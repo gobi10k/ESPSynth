@@ -59,12 +59,12 @@ float MoogFilter::process(float input) {
     input *= drive_;
     
     // Feedback with saturation
-    float feedbackSample = saturate(delay_[3] * feedback);
+    float feedbackSample = fastTanh(delay_[3] * feedback);
     input -= feedbackSample;
     
     // Four cascaded one-pole lowpass filters
     for (int i = 0; i < 4; i++) {
-        stage_[i] = gMod * saturate(input) + (1.0f - gMod) * delay_[i];
+        stage_[i] = gMod * fastTanh(input) + (1.0f - gMod) * delay_[i];
         delay_[i] = stage_[i];
         input = stage_[i];
     }
@@ -73,8 +73,8 @@ float MoogFilter::process(float input) {
     float output = stage_[3] * (1.0f + feedback * 0.3f);
     
     // Output saturation
-    output = saturate(output);
-    
+    output = fastTanh(output);
+
     if (isnan(output) || isinf(output)) {
         reset();
         return 0.0f;
