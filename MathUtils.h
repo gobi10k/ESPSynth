@@ -36,4 +36,14 @@ inline float fastTanh(float x) {
     return x * (27.0f + x2) / (27.0f + 9.0f * x2);
 }
 
+/**
+ * Fast log2 approximation
+ */
+inline float fastLog2(float x) {
+    union { float f; uint32_t i; } vx = { x };
+    float y = (float)vx.i;
+    y *= 1.1920928955078125e-7f;
+    return y - 126.94269504f;
+}
+
 #endif

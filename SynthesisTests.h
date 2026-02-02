@@ -18,6 +18,8 @@ private:
     static void testResonatorStress();
     static void testCombStress();
     static void testGranularStress();
+    static void testChorusStress();
+    static void testSaturationStress();
 };
 
 #endif

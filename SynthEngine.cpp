@@ -350,17 +350,8 @@ uint8_t SynthEngine::getActiveVoiceCount() const {
 
 void SynthEngine::processBlock() {
     profiler_.startSample();
-    int16_t buffer[DMA_BUFFER_SAMPLES * 2];
+    blockCounter_++;
     
-    // Heartbeat every ~1 second (48000 samples / 128 samples per block = 375 blocks)
-    static int blockCounter = 0;
-    if (++blockCounter >= 375) {
-        blockCounter = 0;
-        // Using a non-blocking print would be better, but for debugging this is ok
-        // We use a single char to minimize impact
-        Serial.print(".");
-    }
-
     for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
         // Process arpeggiator (only if mode is not OFF and we have notes)
         if (arp_.getMode() != ArpMode::OFF) {
@@ -467,12 +458,12 @@ void SynthEngine::processBlock() {
         sample = fastTanh(sample);
         
         int16_t sampleInt = (int16_t)(sample * 32767.0f);
-        buffer[i * 2] = sampleInt;
-        buffer[i * 2 + 1] = sampleInt;
+        blockBuffer_[i * 2] = sampleInt;
+        blockBuffer_[i * 2 + 1] = sampleInt;
     }
     
     size_t bytesWritten;
-    i2s_write(I2S_NUM_0, buffer, sizeof(buffer), &bytesWritten, portMAX_DELAY);
+    i2s_write(I2S_NUM_0, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
     profiler_.endSample();
 }
 

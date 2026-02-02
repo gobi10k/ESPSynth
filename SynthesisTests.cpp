@@ -23,6 +23,8 @@ void SynthesisTests::runAll() {
     testModMatrix();
 
     Serial.println("\n--- RUNNING STRESS TESTS (100k samples) ---");
+    testSaturationStress();
+    testChorusStress();
     testReverbStress();
     testResonatorStress();
     testCombStress();
@@ -109,6 +111,44 @@ void SynthesisTests::testGranularStress() {
         }
     }
     delete ge;
+    Serial.println(passed ? "PASSED" : "FAILED");
+}
+
+void SynthesisTests::testSaturationStress() {
+    Serial.print("Stress testing Saturation... ");
+    Saturation* sat = new Saturation();
+    sat->setDrive(10.0f);
+    sat->setType(SaturationType::FOLDBACK);
+
+    bool passed = true;
+    for (int i = 0; i < 100000; i++) {
+        float in = (float)rand() / RAND_MAX * 10.0f; // High gain
+        float out = sat->process(in);
+        if (isnan(out) || isinf(out)) {
+            passed = false;
+            break;
+        }
+    }
+    delete sat;
+    Serial.println(passed ? "PASSED" : "FAILED");
+}
+
+void SynthesisTests::testChorusStress() {
+    Serial.print("Stress testing Chorus... ");
+    Chorus* cho = new Chorus();
+    cho->setDepth(1.0f);
+    cho->setMix(1.0f);
+
+    bool passed = true;
+    for (int i = 0; i < 100000; i++) {
+        float in = (float)rand() / RAND_MAX;
+        float out = cho->process(in);
+        if (isnan(out) || isinf(out)) {
+            passed = false;
+            break;
+        }
+    }
+    delete cho;
     Serial.println(passed ? "PASSED" : "FAILED");
 }
 

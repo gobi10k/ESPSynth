@@ -30,7 +30,13 @@ public:
         sampleCount_++;
         if (elapsed > maxTime_) maxTime_ = elapsed;
         if (elapsed < minTime_) minTime_ = elapsed;
+
+        // Update rolling average
+        float blockDurationUs = (DMA_BUFFER_SAMPLES * 1000000.0f) / SAMPLE_RATE;
+        lastCpuLoad_ = (elapsed / blockDurationUs) * 100.0f;
     }
+
+    float getCPUPercent() const { return lastCpuLoad_; }
 
     void printStats() {
         if (sampleCount_ == 0) {
@@ -64,6 +70,7 @@ private:
     uint32_t sampleCount_ = 0;
     uint32_t maxTime_ = 0;
     uint32_t minTime_ = 0xFFFFFFFF;
+    float lastCpuLoad_ = 0.0f;
 };
 
 class SynthEngine {
@@ -158,6 +165,8 @@ public:
     
     // Profiler
     void printCPUStats() { profiler_.printStats(); }
+    float getCPUPercent() { return profiler_.getCPUPercent(); }
+    uint32_t getBlockCount() const { return blockCounter_; }
 
     // Voice info
     uint8_t getActiveVoiceCount() const;
@@ -232,8 +241,10 @@ private:
     // Runtime
     float currentVelocity_;
     volatile bool running_;
+    volatile uint32_t blockCounter_ = 0;
     TaskHandle_t audioTaskHandle_;
     AudioProfiler profiler_;
+    int16_t blockBuffer_[DMA_BUFFER_SAMPLES * 2];
 };
 
 #endif

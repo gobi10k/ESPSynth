@@ -1,5 +1,6 @@
 #include "Effects.h"
 #include "MathUtils.h"
+#include "Wavetables.h"
 #include <math.h>
 #include <string.h>
 
@@ -169,28 +170,23 @@ void Chorus::clear() {
 }
 
 float Chorus::process(float input) {
-    // Safety check
-    if (isnan(input) || isinf(input)) input = 0.0f;
-    
-    // Clamp input
-    if (input > 1.0f) input = 1.0f;
-    if (input < -1.0f) input = -1.0f;
+    if (isnan(input) || isinf(input)) return 0.0f;
     
     // Write to buffer (convert to int16)
     buffer_[writePos_] = (int16_t)(input * 32000.0f);
     
-    // LFO for modulated delay time
-    float lfoValue = sinf(lfoPhase_ * PHASE_TO_FLOAT * 2.0f * M_PI);
+    // LFO using wavetable (much faster than sinf)
+    float lfoValue = Wavetables::readSine(lfoPhase_);
     lfoPhase_ += lfoIncrement_;
     
     // Delay time: 5-12ms modulated by LFO
-    float baseDelay = 0.007f * SAMPLE_RATE;  // 7ms center
-    float modAmount = depth_ * 0.003f * SAMPLE_RATE;  // Up to 3ms mod
+    float baseDelay = 0.007f * SAMPLE_RATE;
+    float modAmount = depth_ * 0.003f * SAMPLE_RATE;
     float delaySamples = baseDelay + lfoValue * modAmount;
     
     // Safety clamp
     if (delaySamples < 1.0f) delaySamples = 1.0f;
-    if (delaySamples > CHORUS_BUFFER_SIZE - 2) delaySamples = CHORUS_BUFFER_SIZE - 2;
+    if (delaySamples > CHORUS_BUFFER_SIZE - 2) delaySamples = (float)CHORUS_BUFFER_SIZE - 2.0f;
     
     // Read with linear interpolation
     float readPosF = (float)writePos_ - delaySamples;

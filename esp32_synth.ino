@@ -35,6 +35,8 @@ bool satEnabled = false;
 bool chorusEnabled = false;
 bool delayEnabled = false;
 int selectedLFO = 0;
+bool autoStats = false;
+uint32_t lastHeartbeatBlock = 0;
 
 // ============================================================================
 // MIDI CALLBACKS
@@ -333,6 +335,7 @@ void printHelp() {
     Serial.println("  gl<ms>     Glide time");
     Serial.println("  v<0-99>    Master volume %");
     Serial.println("  z          Print CPU statistics");
+    Serial.println("  p          Toggle auto CPU stats");
     Serial.println("  t          Run internal tests");
     Serial.println("  S          Stress test (4 notes, FX on)");
     Serial.println("  k          Isolated module stress test (sequential)");
@@ -633,6 +636,10 @@ void processCommand(const String& cmd) {
         case 'z':
             synth.printCPUStats();
             break;
+        case 'p':
+            autoStats = !autoStats;
+            Serial.printf("Auto stats: %s\n", autoStats ? "ON" : "OFF");
+            break;
         case 't':
             SynthesisTests::runAll();
             break;
@@ -792,6 +799,17 @@ void loop() {
         String cmd = Serial.readStringUntil('\n');
         cmd.trim();
         processCommand(cmd);
+    }
+
+    // Heartbeat and auto-stats from loop() to avoid Serial deadlocks in audio task
+    uint32_t currentBlock = synth.getBlockCount();
+    if (currentBlock >= lastHeartbeatBlock + 375) { // ~1 second
+        lastHeartbeatBlock = currentBlock;
+        if (autoStats) {
+            Serial.printf("[CPU: %.1f%%] ", synth.getCPUPercent());
+        } else {
+            Serial.print(".");
+        }
     }
     
     vTaskDelay(pdMS_TO_TICKS(1));
