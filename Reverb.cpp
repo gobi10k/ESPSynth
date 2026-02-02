@@ -80,9 +80,14 @@ void FDNReverb::updateDecayCoefficients() {
 
 float FDNReverb::process(float input) {
     if (!enabled_) return input;
+    if (isnan(input) || isinf(input)) return 0.0f;
     
-    // Pre-delay
-    int16_t preDelayed = preDelayBuffer_[(preDelayPos_ - preDelayTime_ + PREDELAY_MAX) % PREDELAY_MAX];
+    // Pre-delay using safe index math
+    int preReadPos = (int)preDelayPos_ - (int)preDelayTime_;
+    if (preReadPos < 0) preReadPos += PREDELAY_MAX;
+    preReadPos %= PREDELAY_MAX;
+
+    int16_t preDelayed = preDelayBuffer_[preReadPos];
     preDelayBuffer_[preDelayPos_] = (int16_t)(input * 32000.0f);
     preDelayPos_ = (preDelayPos_ + 1) % PREDELAY_MAX;
     
@@ -91,7 +96,10 @@ float FDNReverb::process(float input) {
     // Read from delay lines
     float outputs[4];
     for (int i = 0; i < 4; i++) {
-        int readPos = (writePos_[i] - delayTimes_[i] + FDN_MAX_DELAY) % FDN_MAX_DELAY;
+        int readPos = (int)writePos_[i] - (int)delayTimes_[i];
+        if (readPos < 0) readPos += FDN_MAX_DELAY;
+        readPos %= FDN_MAX_DELAY;
+
         outputs[i] = delayLines_[i][readPos] / 32000.0f;
         
         // Damping filter

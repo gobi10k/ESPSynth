@@ -638,6 +638,7 @@ void processCommand(const String& cmd) {
             break;
         case 'k':
             Serial.println("Starting Sequential Module Stress Test...");
+            Serial.flush();
 
             synth.allNotesOff();
             synth.getEffects().setEnabled(false, false, false);
@@ -646,36 +647,61 @@ void processCommand(const String& cmd) {
             synth.setResonatorEnabled(false);
             synth.setCombEnabled(false);
             synth.setGranularEnabled(false);
+            delay(1000);
 
             Serial.println("1. Triggering 4 voices (Clean)...");
-            for (int i = 0; i < NUM_VOICES; i++) synth.noteOn(48 + i * 5, 80);
+            Serial.flush();
+            for (int i = 0; i < NUM_VOICES; i++) {
+                Serial.printf("   - Voice %d\n", i);
+                Serial.flush();
+                synth.noteOn(48 + i * 5, 80);
+                delay(200);
+            }
             delay(2000);
 
-            Serial.println("2. Adding Saturation + Chorus + Delay...");
+            Serial.println("2. Enabling Saturation...");
+            Serial.flush();
+            synth.getEffects().saturation.setMix(1.0f);
+            synth.getEffects().setEnabled(true, false, false);
+            delay(2000);
+
+            Serial.println("2b. Enabling Chorus...");
+            Serial.flush();
+            synth.getEffects().setEnabled(true, true, false);
+            delay(2000);
+
+            Serial.println("2c. Enabling Delay...");
+            Serial.flush();
             synth.getEffects().setEnabled(true, true, true);
             delay(2000);
 
             Serial.println("3. Adding Reverb...");
+            Serial.flush();
             synth.getReverb().setEnabled(true);
             delay(2000);
 
             Serial.println("4. Adding Compressor...");
+            Serial.flush();
             synth.getCompressor().setEnabled(true);
             delay(2000);
 
             Serial.println("5. Adding Resonator...");
+            Serial.flush();
             synth.setResonatorEnabled(true);
             delay(2000);
 
             Serial.println("6. Adding Comb Filter...");
+            Serial.flush();
             synth.setCombEnabled(true);
             delay(2000);
 
             Serial.println("7. Adding Granular Exciter...");
+            Serial.flush();
             synth.setGranularEnabled(true);
             delay(2000);
 
             Serial.println("Sequential stress test complete. Still alive!");
+            Serial.flush();
             break;
 
         case 'S':

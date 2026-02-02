@@ -38,10 +38,19 @@ void Delay::clear() {
 }
 
 float Delay::process(float input) {
-    // Read from delay line (convert int16 to float)
-    uint16_t readPos = (writePos_ + MAX_DELAY_SAMPLES - delaySamples_) % MAX_DELAY_SAMPLES;
-    float delayed = buffer_[readPos] / 32767.0f;
+    if (isnan(input) || isinf(input)) return 0.0f;
+
+    // Read from delay line using safe index math
+    int readPos = (int)writePos_ - (int)delaySamples_;
+    if (readPos < 0) readPos += MAX_DELAY_SAMPLES;
+    readPos %= MAX_DELAY_SAMPLES;
     
+    float delayed = buffer_[readPos] / 32767.0f;
+    if (isnan(delayed) || isinf(delayed)) {
+        clear();
+        return input;
+    }
+
     // Write input + feedback to delay line (convert float to int16)
     float toWrite = input + delayed * feedback_;
     toWrite = constrain(toWrite, -1.0f, 1.0f);
@@ -76,13 +85,15 @@ void Saturation::setMix(float mix) {
 }
 
 float Saturation::process(float input) {
+    if (isnan(input) || isinf(input)) return 0.0f;
+
     float driven = input * drive_;
     float saturated = 0.0f;
     
     switch (type_) {
         case SaturationType::SOFT:
-            // Soft saturation using tanh
-            saturated = tanhf(driven);
+            // Soft saturation using fastTanh
+            saturated = fastTanh(driven);
             break;
             
         case SaturationType::HARD:
@@ -90,14 +101,18 @@ float Saturation::process(float input) {
             saturated = constrain(driven, -1.0f, 1.0f);
             break;
             
-        case SaturationType::FOLDBACK:
-            // Wavefolding
-            while (driven > 1.0f || driven < -1.0f) {
-                if (driven > 1.0f) driven = 2.0f - driven;
-                if (driven < -1.0f) driven = -2.0f - driven;
-            }
-            saturated = driven;
+        case SaturationType::FOLDBACK: {
+            // Wavefolding - non-looping version for stability
+            float x = driven;
+            // First fold
+            if (x > 1.0f) x = 2.0f - x;
+            else if (x < -1.0f) x = -2.0f - x;
+            // Second fold
+            if (x > 1.0f) x = 2.0f - x;
+            else if (x < -1.0f) x = -2.0f - x;
+            saturated = x;
             break;
+        }
             
         case SaturationType::BITCRUSH: {
             // Reduce bit depth

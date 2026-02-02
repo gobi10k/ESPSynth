@@ -73,6 +73,9 @@ void CombFilter::reset() {
 }
 
 float CombFilter::process(float input) {
+    if (isnan(input) || isinf(input)) return 0.0f;
+    if (isnan(delaySamples_) || isinf(delaySamples_)) return input;
+
     // Handle excitation
     if (exciteCounter_ > 0) {
         float noise = ((float)rand() / RAND_MAX * 2.0f - 1.0f) * exciteLevel_;
@@ -81,8 +84,9 @@ float CombFilter::process(float input) {
     }
     
     // Read with linear interpolation
-    float readPos = writePos_ - delaySamples_;
-    if (readPos < 0) readPos += COMB_BUFFER_SIZE;
+    float readPos = (float)writePos_ - delaySamples_;
+    if (readPos < 0.0f) readPos += (float)COMB_BUFFER_SIZE;
+    if (readPos < 0.0f) readPos = 0.0f; // Final safety
     
     int readIdx0 = (int)readPos;
     int readIdx1 = (readIdx0 + 1) % COMB_BUFFER_SIZE;
