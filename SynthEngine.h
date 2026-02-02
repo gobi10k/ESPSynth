@@ -112,6 +112,8 @@ public:
     void setFilterResonance(float r);
     void setFilterMode(FilterMode mode);
     void setFilterEnvAmount(float amount);
+    void setFilterEnvVelocity(float amount);
+    void setFilterKeyTracking(float amount);
     void setFilterType(VoiceFilterType type);
     
     float getFilterCutoff() const { return filterCutoff_; }
@@ -202,6 +204,8 @@ private:
     FilterMode filterMode_;
     VoiceFilterType filterType_;
     float filterEnvAmount_;
+    float filterEnvVelocity_;
+    float filterKeyTracking_;
     
     float ampA_, ampD_, ampS_, ampR_;
     float fltA_, fltD_, fltS_, fltR_;

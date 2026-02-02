@@ -90,9 +90,6 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
             synth.setAmpADSR(-1, -1, -1, val * 0.02f);
             synth.setFilterADSR(-1, -1, -1, val * 0.02f);
             break;
-        case MIDI_CC::FILTER_TYPE:
-            synth.setFilterType((VoiceFilterType)(val % 2));
-            break;
         case MIDI_CC::FILTER_KEY_TRACK:
             synth.setFilterKeyTracking(val / 127.0f);
             break;

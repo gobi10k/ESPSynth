@@ -16,6 +16,8 @@ Voice::Voice() :
     prevPhase_(0.0f),
     filterType_(VoiceFilterType::SVF),
     filterEnvAmount_(0.5f),
+    filterEnvVelocity_(0.5f),
+    filterKeyTracking_(0.5f),
     globalFilterMod_(0.0f),
     globalPitchMod_(0.0f),
     targetFreq_(440.0f),
@@ -51,6 +53,7 @@ void Voice::noteOn(uint8_t note, uint8_t velocity) {
     state_ = VoiceState::ACTIVE;
     
     targetFreq_ = midiToFreq(note);
+    svf_.setKeyFreq(targetFreq_);
     ladder_.setKeyFreq(targetFreq_);
     
     if (pitchSmooth_.getCurrent() == 0.0f) {
@@ -136,7 +139,11 @@ float Voice::process() {
 
     // Update filter coefficients every 8 samples for performance
     if ((age_ & 0x07) == 0) {
-        float cutoffMod = (filterEnvVal * filterEnvAmount_ + globalFilterMod_) * 5000.0f;
+        // Apply velocity scaling to filter envelope amount
+        float velocityMod = 1.0f - filterEnvVelocity_ + (velScalar_ * filterEnvVelocity_);
+        float effectiveEnvAmount = filterEnvAmount_ * velocityMod;
+
+        float cutoffMod = (filterEnvVal * effectiveEnvAmount + globalFilterMod_) * 5000.0f;
         if (filterType_ == VoiceFilterType::SVF) {
             svf_.updateCoefficients(cutoffMod);
         } else {
@@ -225,6 +232,16 @@ void Voice::setFilterMode(FilterMode mode) {
 
 void Voice::setFilterEnvAmount(float amount) {
     filterEnvAmount_ = constrain(amount, -1.0f, 1.0f);
+}
+
+void Voice::setFilterEnvVelocity(float amount) {
+    filterEnvVelocity_ = constrain(amount, 0.0f, 1.0f);
+}
+
+void Voice::setFilterKeyTracking(float amount) {
+    filterKeyTracking_ = constrain(amount, 0.0f, 1.0f);
+    svf_.setKeyTracking(filterKeyTracking_);
+    ladder_.setKeyTracking(filterKeyTracking_);
 }
 
 void Voice::setAmpADSR(float a, float d, float s, float r) {

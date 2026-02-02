@@ -298,6 +298,20 @@ void SynthEngine::setFilterEnvAmount(float amount) {
     }
 }
 
+void SynthEngine::setFilterEnvVelocity(float amount) {
+    filterEnvVelocity_ = constrain(amount, 0.0f, 1.0f);
+    for (int i = 0; i < NUM_VOICES; i++) {
+        voices_[i].setFilterEnvVelocity(amount);
+    }
+}
+
+void SynthEngine::setFilterKeyTracking(float amount) {
+    filterKeyTracking_ = constrain(amount, 0.0f, 1.0f);
+    for (int i = 0; i < NUM_VOICES; i++) {
+        voices_[i].setFilterKeyTracking(amount);
+    }
+}
+
 void SynthEngine::setFilterType(VoiceFilterType type) {
     filterType_ = type;
     for (int i = 0; i < NUM_VOICES; i++) {

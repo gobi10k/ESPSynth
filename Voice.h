@@ -70,6 +70,8 @@ public:
     void setFilterResonance(float r);
     void setFilterMode(FilterMode mode);
     void setFilterEnvAmount(float amount);
+    void setFilterEnvVelocity(float amount);
+    void setFilterKeyTracking(float amount);
     
     // Envelopes
     void setAmpADSR(float a, float d, float s, float r);
@@ -106,7 +108,9 @@ private:
     Filter svf_;
     LadderFilter ladder_;
     float filterEnvAmount_;
-    
+    float filterEnvVelocity_;
+    float filterKeyTracking_;
+
     // Modulation
     float globalFilterMod_;
     float globalPitchMod_;

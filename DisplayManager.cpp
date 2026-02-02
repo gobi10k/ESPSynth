@@ -110,8 +110,8 @@ void DisplayManager::adjustValue(int delta) {
     switch (currentPage_) {
         case DisplayPage::OSCILLATORS:
             switch (selectedItem_) {
-                case 0: engine_->setOscWaveform(0, (Waveform)((int)engine_->getOscWaveform(0) + delta + 7) % 7); break;
-                case 1: engine_->setOscWaveform(1, (Waveform)((int)engine_->getOscWaveform(1) + delta + 7) % 7); break;
+                case 0: engine_->setOscWaveform(0, (Waveform)(((int)engine_->getOscWaveform(0) + delta + 7) % 7)); break;
+                case 1: engine_->setOscWaveform(1, (Waveform)(((int)engine_->getOscWaveform(1) + delta + 7) % 7)); break;
                 case 2: engine_->setOscMix(constrain(engine_->getOscMix() + delta * 0.05f, 0.0f, 1.0f)); break;
                 case 3: engine_->setOscDetune(1, constrain(engine_->getOscDetune(1) + delta * 0.5f, -50.0f, 50.0f)); break;
             }
@@ -119,8 +119,8 @@ void DisplayManager::adjustValue(int delta) {
 
         case DisplayPage::FILTER:
             switch (selectedItem_) {
-                case 0: engine_->setFilterType((VoiceFilterType)((int)engine_->getFilterType() + delta + 2) % 2); break;
-                case 1: engine_->setFilterMode((FilterMode)((int)engine_->getFilterMode() + delta + 4) % 4); break;
+                case 0: engine_->setFilterType((VoiceFilterType)(((int)engine_->getFilterType() + delta + 2) % 2)); break;
+                case 1: engine_->setFilterMode((FilterMode)(((int)engine_->getFilterMode() + delta + 4) % 4)); break;
                 case 2: engine_->setFilterCutoff(constrain(engine_->getFilterCutoff() * (1.0f + delta * 0.1f), 20.0f, 20000.0f)); break;
                 case 3: engine_->setFilterResonance(constrain(engine_->getFilterResonance() + delta * 0.05f, 0.0f, 1.0f)); break;
                 case 4: engine_->setFilterKeyTracking(constrain(engine_->getFilterKeyTracking() + delta * 0.1f, 0.0f, 1.0f)); break;
@@ -129,12 +129,14 @@ void DisplayManager::adjustValue(int delta) {
             break;
 
         case DisplayPage::EFFECTS:
-            EffectsChain& fx = engine_->getEffects();
-            switch (selectedItem_) {
-                case 0: fx.setEnabled(!fx.isSatEnabled(), fx.isChorusEnabled(), fx.isDelayEnabled()); break;
-                case 1: fx.setEnabled(fx.isSatEnabled(), !fx.isChorusEnabled(), fx.isDelayEnabled()); break;
-                case 2: fx.setEnabled(fx.isSatEnabled(), fx.isChorusEnabled(), !fx.isDelayEnabled()); break;
-                case 3: engine_->getReverb().setEnabled(!engine_->getReverb().isEnabled()); break;
+            {
+                EffectsChain& fx = engine_->getEffects();
+                switch (selectedItem_) {
+                    case 0: fx.setEnabled(!fx.isSatEnabled(), fx.isChorusEnabled(), fx.isDelayEnabled()); break;
+                    case 1: fx.setEnabled(fx.isSatEnabled(), !fx.isChorusEnabled(), fx.isDelayEnabled()); break;
+                    case 2: fx.setEnabled(fx.isSatEnabled(), fx.isChorusEnabled(), !fx.isDelayEnabled()); break;
+                    case 3: engine_->getReverb().setEnabled(!engine_->getReverb().isEnabled()); break;
+                }
             }
             break;
 
