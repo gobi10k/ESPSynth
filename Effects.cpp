@@ -1,4 +1,5 @@
 #include "Effects.h"
+#include "MathUtils.h"
 #include <math.h>
 #include <string.h>
 

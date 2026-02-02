@@ -1,4 +1,5 @@
 #include "Voice.h"
+#include "MathUtils.h"
 #include <math.h>
 
 const char* VOICE_FILTER_NAMES[] = {"SVF", "LADR"};
