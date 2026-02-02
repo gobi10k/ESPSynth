@@ -21,11 +21,16 @@
 #include "PresetManager.h"
 #include "DisplayManager.h"
 #include "SynthesisTests.h"
+#include "AnalogControls.h"
+#include "HardwareEncoder.h"
 
 SynthEngine synth;
 MIDIHandler midi;
 PresetManager presets;
 DisplayManager display;
+AnalogControls controls;
+HardwareEncoder encNav(ENC1_A_PIN, ENC1_B_PIN, ENC1_SW_PIN);
+HardwareEncoder encVal(ENC2_A_PIN, ENC2_B_PIN, ENC2_SW_PIN);
 
 // ============================================================================
 // STATE
@@ -252,6 +257,11 @@ void setup() {
         while (1) delay(1000);
     }
     
+    // Setup controls
+    controls.init(&synth);
+    encNav.init();
+    encVal.init();
+
     // Setup MIDI
     midi.begin(16, 17);  // RX=16, TX=17
     midi.setNoteOnCallback(onMIDINoteOn);
@@ -859,6 +869,44 @@ void processCommand(const String& cmd) {
 // ============================================================================
 
 void loop() {
+    // Process Hardware Controls
+    controls.update();
+    encNav.update();
+    encVal.update();
+
+    // Handle Navigation Encoder
+    int navDelta = encNav.getDelta();
+    if (navDelta != 0) {
+        if (display.getCurrentPage() == DisplayPage::MAIN) {
+            if (navDelta > 0) display.nextPage();
+            else display.prevPage();
+        } else {
+            if (navDelta > 0) display.nextItem();
+            else display.prevItem();
+        }
+    }
+
+    if (encNav.wasClicked()) {
+        if (display.getCurrentPage() != DisplayPage::MAIN) {
+            display.setPage(DisplayPage::MAIN);
+        } else {
+            display.nextPage();
+        }
+    }
+
+    // Handle Value Encoder
+    int valDelta = encVal.getDelta();
+    if (valDelta != 0) {
+        display.adjustValue(valDelta);
+    }
+
+    if (encVal.wasClicked()) {
+        // Encoder 2 click could trigger something like "preview note"
+        synth.noteOn(60, 100);
+        delay(100);
+        synth.noteOff(60);
+    }
+
     // Process MIDI
     midi.process();
     

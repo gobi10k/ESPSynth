@@ -64,4 +64,27 @@ constexpr uint8_t MAX_OSCILLATORS = 4;
 constexpr uint8_t MIDI_RX_PIN = 16;
 constexpr uint8_t MIDI_TX_PIN = 17;
 
+// ============================================================================
+// ANALOG CONTROLS (Potentiometers)
+// ============================================================================
+
+constexpr uint8_t POT_CUTOFF_PIN = 32;
+constexpr uint8_t POT_RESO_PIN   = 33;
+constexpr uint8_t POT_VOLUME_PIN = 34;
+constexpr uint8_t POT_EFFECT_PIN = 35;
+
+// ============================================================================
+// ENCODER DEFINITIONS
+// ============================================================================
+
+// Encoder 1: Navigation
+constexpr uint8_t ENC1_A_PIN  = 36;
+constexpr uint8_t ENC1_B_PIN  = 39;
+constexpr uint8_t ENC1_SW_PIN = 5;
+
+// Encoder 2: Value adjustment
+constexpr uint8_t ENC2_A_PIN  = 14;
+constexpr uint8_t ENC2_B_PIN  = 12;
+constexpr uint8_t ENC2_SW_PIN = 13;
+
 #endif

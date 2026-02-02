@@ -28,6 +28,12 @@ public:
     void nextPage();
     void prevPage();
 
+    void nextItem();
+    void prevItem();
+    void adjustValue(int delta);
+
+    DisplayPage getCurrentPage() const { return currentPage_; }
+
 private:
     void drawUI();
     void drawMainPage();
@@ -43,6 +49,7 @@ private:
     uint16_t refreshDelayMs_;
     volatile bool running_;
     DisplayPage currentPage_;
+    int8_t selectedItem_;
 };
 
 #endif
