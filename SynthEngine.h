@@ -118,6 +118,8 @@ public:
     float getFilterResonance() const { return filterReso_; }
     FilterMode getFilterMode() const { return filterMode_; }
     VoiceFilterType getFilterType() const { return filterType_; }
+    float getFilterEnvVelocity() const { return filterEnvVelocity_; }
+    float getFilterKeyTracking() const { return filterKeyTracking_; }
     
     // Envelopes
     void setAmpADSR(float a, float d, float s, float r);
@@ -162,6 +164,8 @@ public:
     // Master
     void setMasterVolume(float vol);
     float getMasterVolume() const { return masterVolume_.getTarget(); }
+    void setGlobalPan(float pan) { globalPan_ = pan; }
+    float getGlobalPan() const { return globalPan_; }
     
     // Profiler
     void printCPUStats() { profiler_.printStats(); }
@@ -237,6 +241,7 @@ private:
     
     // Master
     SmoothedValue masterVolume_;
+    float globalPan_;
     
     // Runtime
     float currentVelocity_;

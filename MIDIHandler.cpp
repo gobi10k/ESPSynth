@@ -115,7 +115,7 @@ void MIDIHandler::parseMessage() {
             break;
             
         case 0xC0:  // Program Change
-            // Could add callback
+            if (pcCb_) pcCb_(ch, dataBytes_[0]);
             break;
     }
 }

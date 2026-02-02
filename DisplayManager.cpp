@@ -10,7 +10,8 @@ DisplayManager::DisplayManager() :
     engine_(nullptr),
     displayTaskHandle_(nullptr),
     refreshDelayMs_(50),
-    running_(false)
+    running_(false),
+    currentPage_(DisplayPage::MAIN)
 {
 }
 
@@ -70,89 +71,136 @@ void DisplayManager::setRefreshRate(uint8_t fps) {
     refreshDelayMs_ = 1000 / fps;
 }
 
+void DisplayManager::nextPage() {
+    int page = (int)currentPage_ + 1;
+    if (page >= (int)DisplayPage::NUM_PAGES) page = 0;
+    currentPage_ = (DisplayPage)page;
+}
+
+void DisplayManager::prevPage() {
+    int page = (int)currentPage_ - 1;
+    if (page < 0) page = (int)DisplayPage::NUM_PAGES - 1;
+    currentPage_ = (DisplayPage)page;
+}
+
 void DisplayManager::drawUI() {
     if (!engine_) return;
     
+    switch (currentPage_) {
+        case DisplayPage::MAIN: drawMainPage(); break;
+        case DisplayPage::OSCILLATORS: drawOscPage(); break;
+        case DisplayPage::FILTER: drawFilterPage(); break;
+        case DisplayPage::EFFECTS: drawEffectsPage(); break;
+        default: drawMainPage();
+    }
+}
+
+void DisplayManager::drawMainPage() {
     char buf[32];
     int y = 7;
     
-    // Row 1: Title + Voice Count
-    display_.drawStr(0, y, "ESP32 SYNTH");
+    display_.drawStr(0, y, "MAIN");
     snprintf(buf, sizeof(buf), "V:%d/%d", engine_->getActiveVoiceCount(), NUM_VOICES);
     display_.drawStr(60, y, buf);
 
-    // Heap info for stability monitoring
-    snprintf(buf, sizeof(buf), "%dK", ESP.getFreeHeap() / 1024);
-    display_.drawStr(105, y, buf);
+    snprintf(buf, sizeof(buf), "%.1f%%", engine_->getCPUPercent());
+    display_.drawStr(100, y, buf);
     
     y += 2;
     display_.drawLine(0, y, 127, y);
-    y += 8;
+    y += 12;
     
-    // Row 2: Oscillators
-    Waveform wf1 = engine_->getOscWaveform(0);
-    Waveform wf2 = engine_->getOscWaveform(1);
-    snprintf(buf, sizeof(buf), "OSC: %s / %s", WAVEFORM_NAMES[(int)wf1], WAVEFORM_NAMES[(int)wf2]);
-    display_.drawStr(0, y, buf);
-    y += 9;
-    
-    // Row 3: Filter
-    float cutoff = engine_->getFilterCutoff();
-    if (cutoff >= 1000.0f) {
-        snprintf(buf, sizeof(buf), "FLT:%s %.1fk R%.0f%%", 
-                 FILTER_MODE_NAMES[(int)engine_->getFilterMode()],
-                 cutoff / 1000.0f,
-                 engine_->getFilterResonance() * 100);
-    } else {
-        snprintf(buf, sizeof(buf), "FLT:%s %.0f R%.0f%%", 
-                 FILTER_MODE_NAMES[(int)engine_->getFilterMode()],
-                 cutoff,
-                 engine_->getFilterResonance() * 100);
-    }
-    display_.drawStr(0, y, buf);
-    y += 9;
-    
-    // Row 4: Envelopes (visual bars from first active voice)
+    // Visual indicators
     float ampEnv = 0.0f;
-    float filterEnv = 0.0f;
     for (int i = 0; i < NUM_VOICES; i++) {
         if (engine_->getVoice(i).isActive()) {
-            ampEnv = engine_->getVoice(i).getLevel();
-            filterEnv = engine_->getVoice(i).getFilterEnvValue();
-            break;
+            ampEnv = max(ampEnv, engine_->getVoice(i).getLevel());
         }
     }
 
-    display_.drawStr(0, y, "A:");
-    int ampBar = (int)(ampEnv * 25);
-    display_.drawFrame(12, y - 6, 27, 7);
-    if (ampBar > 0) display_.drawBox(13, y - 5, ampBar, 5);
-    
-    display_.drawStr(45, y, "F:");
-    int fltBar = (int)(filterEnv * 25);
-    display_.drawFrame(55, y - 6, 27, 7);
-    if (fltBar > 0) display_.drawBox(56, y - 5, fltBar, 5);
-    
-    // LFO indicator
-    float lfoVal = engine_->getLFO(0).getRawValue();
-    display_.drawStr(90, y, "L:");
-    int lfoX = 100 + (int)(lfoVal * 10);
-    display_.drawBox(lfoX, y - 5, 3, 5);
-    y += 9;
-    
-    // Row 5: Effects status
-    snprintf(buf, sizeof(buf), "FX:");
-    display_.drawStr(0, y, buf);
-    
-    int fxX = 18;
+    display_.drawStr(0, y, "LEVEL:");
+    display_.drawFrame(40, y-7, 80, 8);
+    display_.drawBox(41, y-6, (int)(ampEnv * 78), 6);
+    y += 14;
+
+    display_.drawStr(0, y, "LFO:");
+    float lfo = (engine_->getLFO(0).getRawValue() + 1.0f) * 0.5f;
+    display_.drawFrame(40, y-7, 80, 8);
+    display_.drawBox(41, y-6, (int)(lfo * 78), 6);
+    y += 14;
+
+    // Effects footer
     EffectsChain& fx = engine_->getEffects();
-    if (fx.isSatEnabled()) display_.drawStr(fxX, y, "[S]");
-    fxX += 20;
-    if (fx.isChorusEnabled()) display_.drawStr(fxX, y, "[C]");
-    fxX += 20;
-    if (fx.isDelayEnabled()) display_.drawStr(fxX, y, "[D]");
-    fxX += 20;
-    if (engine_->getReverb().isEnabled()) display_.drawStr(fxX, y, "[R]");
+    display_.drawStr(0, 63, fx.isSatEnabled() ? "[S]" : " S ");
+    display_.drawStr(25, 63, fx.isChorusEnabled() ? "[C]" : " C ");
+    display_.drawStr(50, 63, fx.isDelayEnabled() ? "[D]" : " D ");
+    display_.drawStr(75, 63, engine_->getReverb().isEnabled() ? "[R]" : " R ");
+    display_.drawStr(100, 63, engine_->getCompressor().isEnabled() ? "[K]" : " K ");
+}
+
+void DisplayManager::drawOscPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "OSCILLATORS");
+    display_.drawLine(0, 9, 127, 9);
+    
+    Waveform wf1 = engine_->getOscWaveform(0);
+    Waveform wf2 = engine_->getOscWaveform(1);
+    
+    display_.drawStr(0, 22, "OSC1:");
+    display_.drawStr(40, 22, WAVEFORM_NAMES[(int)wf1]);
+    
+    display_.drawStr(0, 34, "OSC2:");
+    display_.drawStr(40, 34, WAVEFORM_NAMES[(int)wf2]);
+
+    snprintf(buf, sizeof(buf), "MIX: %.0f%%", engine_->getOscMix() * 100.0f);
+    display_.drawStr(0, 46, buf);
+
+    snprintf(buf, sizeof(buf), "DETUNE: %.1f", engine_->getOscDetune(1));
+    display_.drawStr(0, 58, buf);
+}
+
+void DisplayManager::drawFilterPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "FILTER");
+    display_.drawLine(0, 9, 127, 9);
+
+    const char* typeName = (engine_->getFilterType() == VoiceFilterType::SVF) ? "SVF" : "LADDER";
+    snprintf(buf, sizeof(buf), "TYPE: %s", typeName);
+    display_.drawStr(0, 22, buf);
+
+    snprintf(buf, sizeof(buf), "MODE: %s", FILTER_MODE_NAMES[(int)engine_->getFilterMode()]);
+    display_.drawStr(0, 34, buf);
+
+    float cutoff = engine_->getFilterCutoff();
+    snprintf(buf, sizeof(buf), "CUTOFF: %.0f Hz", cutoff);
+    display_.drawStr(0, 42, buf);
+
+    snprintf(buf, sizeof(buf), "RESO: %.0f%%", engine_->getFilterResonance() * 100.0f);
+    display_.drawStr(0, 50, buf);
+
+    snprintf(buf, sizeof(buf), "KBD:%.0f%% VEL:%.0f%%",
+             engine_->getFilterKeyTracking() * 100.0f,
+             engine_->getFilterEnvVelocity() * 100.0f);
+    display_.drawStr(0, 58, buf);
+}
+
+void DisplayManager::drawEffectsPage() {
+    display_.drawStr(0, 7, "EFFECTS");
+    display_.drawLine(0, 9, 127, 9);
+    
+    EffectsChain& fx = engine_->getEffects();
+
+    display_.drawStr(0, 22, "SAT:");
+    display_.drawStr(40, 22, fx.isSatEnabled() ? "ON" : "OFF");
+
+    display_.drawStr(0, 34, "CHORUS:");
+    display_.drawStr(50, 34, fx.isChorusEnabled() ? "ON" : "OFF");
+
+    display_.drawStr(0, 46, "DELAY:");
+    display_.drawStr(45, 46, fx.isDelayEnabled() ? "ON" : "OFF");
+
+    display_.drawStr(0, 58, "REVERB:");
+    display_.drawStr(50, 58, engine_->getReverb().isEnabled() ? "ON" : "OFF");
 }
 
 void DisplayManager::displayTaskWrapper(void* param) {

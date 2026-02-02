@@ -22,6 +22,7 @@ SynthEngine::SynthEngine() :
     combEnabled_(false),
     granularMix_(0.0f),
     granularEnabled_(false),
+    globalPan_(0.0f),
     currentVelocity_(0.0f),
     running_(false),
     audioTaskHandle_(nullptr)
@@ -180,6 +181,10 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
     voices_[voice].setFilterResonance(filterReso_);
     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
     
+    // Combine spread and global pan
+    float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
+    voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
+
     // Melodic tracking for resonator
     if (resonatorEnabled_) {
         resonator_.setFrequency(midiToFreq(note));
@@ -399,6 +404,11 @@ void SynthEngine::processBlock() {
                     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
                     voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
                     voices_[voice].setGlideTime(glideTime_);
+
+                    // Combine spread and global pan
+                    float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
+                    voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
+
                     currentVelocity_ = arp_.getCurrentVelocity() / 127.0f;
 
                     if (resonatorEnabled_) {
@@ -420,54 +430,79 @@ void SynthEngine::processBlock() {
             lastArpGate_ = arp_.isGateOn();
         }
         
-        // Mix all voices
-        float sample = 0.0f;
+        // Mix all voices with panning
+        float left = 0.0f;
+        float right = 0.0f;
+
         for (int v = 0; v < NUM_VOICES; v++) {
             if (voices_[v].isActive()) {
                 float voiceSample = voices_[v].process();
                 // Safety clamp
                 if (voiceSample > 1.0f) voiceSample = 1.0f;
                 if (voiceSample < -1.0f) voiceSample = -1.0f;
-                sample += voiceSample;
+
+                float pan = voices_[v].getPan();
+                // Constant power panning approx
+                float panAngle = (pan + 1.0f) * 0.785398f;
+                left += voiceSample * cosf(panAngle);
+                right += voiceSample * sinf(panAngle);
             }
         }
         
         // Scale down for mixing
-        sample *= 0.3f;
+        left *= 0.3f;
+        right *= 0.3f;
 
-        // Apply Granular exciter (if enabled)
+        // Apply Granular exciter (if enabled) - Mono input, but we can spread it
         if (granularEnabled_) {
             float gran = granular_.process();
-            sample = sample * (1.0f - granularMix_) + gran * granularMix_;
+            left = left * (1.0f - granularMix_) + gran * granularMix_ * 0.7f;
+            right = right * (1.0f - granularMix_) + gran * granularMix_ * 0.7f;
         }
 
-        // Apply Resonator and Comb (if enabled)
+        // Apply Resonator and Comb (if enabled) - Currently Mono
         if (resonatorEnabled_) {
-            sample = resonator_.process(sample);
+            float mono = (left + right) * 0.5f;
+            float res = resonator_.process(mono);
+            left = left * 0.5f + res * 0.5f;
+            right = right * 0.5f + res * 0.5f;
         }
         if (combEnabled_) {
-            sample = comb_.process(sample);
+            float mono = (left + right) * 0.5f;
+            float cb = comb_.process(mono);
+            left = left * 0.5f + cb * 0.5f;
+            right = right * 0.5f + cb * 0.5f;
         }
-        
-        if (isnan(sample) || isinf(sample)) sample = 0.0f;
 
-        // Re-enable effects
-        sample = effects_.process(sample);
-        sample = reverb_.process(sample);
-        sample = compressor_.process(sample);
-        
-        if (isnan(sample) || isinf(sample)) sample = 0.0f;
+        if (isnan(left) || isinf(left)) left = 0.0f;
+        if (isnan(right) || isinf(right)) right = 0.0f;
+
+        // Process global effects - mono for now but we'll adapt them
+        float monoInput = (left + right) * 0.5f;
+        float wetMono = effects_.process(monoInput);
+
+        // Reverb - let's make it pseudo-stereo
+        float wetL, wetR;
+        reverb_.processStereo(monoInput, wetL, wetR);
+
+        float finalL = wetMono * 0.5f + wetL;
+        float finalR = wetMono * 0.5f + wetR;
+
+        // Compressor on stereo
+        float compL = compressor_.process(finalL);
+        float compR = compressor_.process(finalR);
 
         // Master volume
         float vol = masterVolume_.process();
-        sample *= vol;
+        left = compL * vol;
+        right = compR * vol;
         
-        // Soft clip using fast approximation
-        sample = fastTanh(sample);
+        // Soft clip
+        left = fastTanh(left);
+        right = fastTanh(right);
         
-        int16_t sampleInt = (int16_t)(sample * 32767.0f);
-        blockBuffer_[i * 2] = sampleInt;
-        blockBuffer_[i * 2 + 1] = sampleInt;
+        blockBuffer_[i * 2] = (int16_t)(left * 32767.0f);
+        blockBuffer_[i * 2 + 1] = (int16_t)(right * 32767.0f);
     }
     
     profiler_.endSample();

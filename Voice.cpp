@@ -18,7 +18,8 @@ Voice::Voice() :
     filterEnvAmount_(0.5f),
     globalFilterMod_(0.0f),
     globalPitchMod_(0.0f),
-    targetFreq_(440.0f)
+    targetFreq_(440.0f),
+    pan_(0.0f)
 {
     osc_[0].setWaveform(Waveform::SAW);
     osc_[0].setAmplitude(1.0f);

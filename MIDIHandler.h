@@ -46,6 +46,8 @@ namespace MIDI_CC {
     constexpr uint8_t SYNTH_MODE = 20;
     constexpr uint8_t FM_AMOUNT = 21;
     constexpr uint8_t FILTER_TYPE = 22;
+    constexpr uint8_t FILTER_KEY_TRACK = 23;
+    constexpr uint8_t FILTER_ENV_VEL = 24;
 
     constexpr uint8_t ALL_NOTES_OFF = 123;
 }
@@ -54,6 +56,7 @@ namespace MIDI_CC {
 using NoteOnCallback = std::function<void(uint8_t channel, uint8_t note, uint8_t velocity)>;
 using NoteOffCallback = std::function<void(uint8_t channel, uint8_t note)>;
 using CCCallback = std::function<void(uint8_t channel, uint8_t cc, uint8_t value)>;
+using ProgramChangeCallback = std::function<void(uint8_t channel, uint8_t program)>;
 using PitchBendCallback = std::function<void(uint8_t channel, int16_t value)>;
 using ClockCallback = std::function<void()>;
 
@@ -71,6 +74,7 @@ public:
     void setNoteOnCallback(NoteOnCallback cb) { noteOnCb_ = cb; }
     void setNoteOffCallback(NoteOffCallback cb) { noteOffCb_ = cb; }
     void setCCCallback(CCCallback cb) { ccCb_ = cb; }
+    void setProgramChangeCallback(ProgramChangeCallback cb) { pcCb_ = cb; }
     void setPitchBendCallback(PitchBendCallback cb) { pitchBendCb_ = cb; }
     void setClockCallback(ClockCallback cb) { clockCb_ = cb; }
     
@@ -95,6 +99,7 @@ private:
     NoteOnCallback noteOnCb_;
     NoteOffCallback noteOffCb_;
     CCCallback ccCb_;
+    ProgramChangeCallback pcCb_;
     PitchBendCallback pitchBendCb_;
     ClockCallback clockCb_;
 };

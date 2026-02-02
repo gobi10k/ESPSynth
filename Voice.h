@@ -51,6 +51,10 @@ public:
     float getFilterEnvValue() const { return filterEnv_.getValue(); }
     float getFrequency() const { return targetFreq_; }
     
+    // Panning
+    void setPan(float pan) { pan_ = pan; }
+    float getPan() const { return pan_; }
+
     // Oscillators
     void setOscWaveform(int osc, Waveform wf);
     void setOscDetune(int osc, float cents);
@@ -114,6 +118,9 @@ private:
     // Glide
     SmoothedValue pitchSmooth_;
     float targetFreq_;
+
+    // Panning
+    float pan_;
 };
 
 #endif

@@ -55,6 +55,15 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
         case MIDI_CC::MOD_WHEEL:
             synth.getLFO(0).setDepth(val / 127.0f);
             break;
+        case MIDI_CC::VOLUME:
+            synth.setMasterVolume(val / 127.0f);
+            break;
+        case MIDI_CC::PAN:
+            synth.setGlobalPan((val - 64) / 64.0f);
+            break;
+        case MIDI_CC::EXPRESSION:
+            // Could map to something else, for now just volume scale
+            break;
         case MIDI_CC::FILTER_CUTOFF:
             synth.setFilterCutoff(20.0f + val * 156.0f);  // 20-20000 Hz approx
             break;
@@ -63,15 +72,27 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
             break;
         case MIDI_CC::ATTACK:
             synth.setAmpADSR(val * 0.02f, -1, -1, -1);  // -1 = unchanged
+            synth.setFilterADSR(val * 0.02f, -1, -1, -1);
             break;
         case MIDI_CC::DECAY:
             synth.setAmpADSR(-1, val * 0.02f, -1, -1);
+            synth.setFilterADSR(-1, val * 0.02f, -1, -1);
             break;
         case MIDI_CC::SUSTAIN_LEVEL:
             synth.setAmpADSR(-1, -1, val / 127.0f, -1);
             break;
         case MIDI_CC::RELEASE:
             synth.setAmpADSR(-1, -1, -1, val * 0.02f);
+            synth.setFilterADSR(-1, -1, -1, val * 0.02f);
+            break;
+        case MIDI_CC::FILTER_TYPE:
+            synth.setFilterType((VoiceFilterType)(val % 2));
+            break;
+        case MIDI_CC::FILTER_KEY_TRACK:
+            synth.setFilterKeyTracking(val / 127.0f);
+            break;
+        case MIDI_CC::FILTER_ENV_VEL:
+            synth.setFilterEnvVelocity(val / 127.0f);
             break;
         case MIDI_CC::REVERB_SEND:
             synth.getReverb().setMix(val / 127.0f);
@@ -114,6 +135,13 @@ void onMIDIPitchBend(uint8_t ch, int16_t val) {
     synth.setPitchBend(val);
 }
 
+void onMIDIProgramChange(uint8_t ch, uint8_t program) {
+    PresetData p;
+    if (presets.loadPreset(program, p)) {
+        applyPreset(p);
+    }
+}
+
 void onMIDIClock() {
     synth.getArp().clockTick();
 }
@@ -136,6 +164,8 @@ void applyPreset(const PresetData& p) {
     synth.setSynthMode((VoiceSynthMode)p.synthMode);
     synth.setFMAmount(p.fmAmount / 10.0f);  // Scale 0-255 to 0-25.5
     synth.setFilterEnvAmount(p.filterEnvAmount / 100.0f);
+    synth.setFilterEnvVelocity(p.filterEnvVel / 100.0f);
+    synth.setFilterKeyTracking(p.filterKeyTrack / 100.0f);
     
     synth.setAmpADSR(p.ampAttack / 1000.0f, p.ampDecay / 1000.0f,
                     p.ampSustain / 100.0f, p.ampRelease / 1000.0f);
@@ -170,6 +200,7 @@ void applyPreset(const PresetData& p) {
     
     synth.setGlideTime(p.glideTime);
     synth.setMasterVolume(p.masterVolume / 100.0f);
+    synth.setGlobalPan(p.globalPan / 100.0f);
     
     Serial.printf("Loaded: %s\n", p.name);
 }
@@ -190,6 +221,9 @@ PresetData createPresetFromCurrent(const char* name) {
     p.filterType = (uint8_t)synth.getFilterType();
     p.synthMode = (uint8_t)synth.getSynthMode();
     p.fmAmount = (uint8_t)(synth.getFMAmount() * 10.0f);
+    p.filterEnvVel = (uint8_t)(synth.getFilterEnvVelocity() * 100.0f);
+    p.filterKeyTrack = (uint8_t)(synth.getFilterKeyTracking() * 100.0f);
+    p.globalPan = (int8_t)(synth.getGlobalPan() * 100.0f);
     
     p.effectFlags = (satEnabled ? 1 : 0) | (chorusEnabled ? 2 : 0) | (delayEnabled ? 4 : 0);
     
@@ -223,6 +257,7 @@ void setup() {
     midi.setNoteOnCallback(onMIDINoteOn);
     midi.setNoteOffCallback(onMIDINoteOff);
     midi.setCCCallback(onMIDICC);
+    midi.setProgramChangeCallback(onMIDIProgramChange);
     midi.setPitchBendCallback(onMIDIPitchBend);
     midi.setClockCallback(onMIDIClock);
     
@@ -637,8 +672,16 @@ void processCommand(const String& cmd) {
             synth.printCPUStats();
             break;
         case 'p':
-            autoStats = !autoStats;
-            Serial.printf("Auto stats: %s\n", autoStats ? "ON" : "OFF");
+            if (c1 == 'n') {
+                display.nextPage();
+                Serial.println("Display: Next Page");
+            } else if (c1 == 'p') {
+                display.prevPage();
+                Serial.println("Display: Prev Page");
+            } else {
+                autoStats = !autoStats;
+                Serial.printf("Auto stats: %s\n", autoStats ? "ON" : "OFF");
+            }
             break;
         case 't':
             SynthesisTests::runAll();

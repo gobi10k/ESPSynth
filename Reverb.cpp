@@ -79,9 +79,22 @@ void FDNReverb::updateDecayCoefficients() {
 }
 
 float FDNReverb::process(float input) {
-    if (!enabled_) return input;
-    if (isnan(input) || isinf(input)) return 0.0f;
+    float l, r;
+    processStereo(input, l, r);
+    return (l + r) * 0.5f;
+}
+
+void FDNReverb::processStereo(float input, float& left, float& right) {
+    if (!enabled_) {
+        left = right = input;
+        return;
+    }
     
+    if (isnan(input) || isinf(input)) {
+        left = right = 0.0f;
+        return;
+    }
+
     // Pre-delay using safe index math
     int preReadPos = (int)preDelayPos_ - (int)preDelayTime_;
     if (preReadPos < 0) preReadPos += PREDELAY_MAX;
@@ -125,8 +138,10 @@ float FDNReverb::process(float input) {
         if (writePos_[i] >= FDN_MAX_DELAY) writePos_[i] = 0;
     }
     
-    // Output sum
-    float wet = (outputs[0] + outputs[1] + outputs[2] + outputs[3]) * 0.25f;
+    // Stereo Output: split the 4 channels into 2 pairs
+    float wetL = (outputs[0] + outputs[1]) * 0.5f;
+    float wetR = (outputs[2] + outputs[3]) * 0.5f;
     
-    return input * (1.0f - mix_) + wet * mix_;
+    left = input * (1.0f - mix_) + wetL * mix_;
+    right = input * (1.0f - mix_) + wetR * mix_;
 }
