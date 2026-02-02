@@ -13,7 +13,8 @@ MoogFilter::MoogFilter() :
     resonance_(0.0f),
     drive_(1.0f),
     cutoffMod_(0.0f),
-    g_(0.0f)
+    gMod_(0.0f),
+    invGMod_(1.0f)
 {
     reset();
     setCutoff(cutoffHz_);
@@ -92,7 +93,8 @@ LadderFilter::LadderFilter() :
     keyTracking_(0.0f),
     keyFreq_(440.0f),
     cutoffMod_(0.0f),
-    g_(0.0f)
+    gMod_(0.0f),
+    invGMod_(1.0f)
 {
     reset();
     setCutoff(cutoffHz_);
