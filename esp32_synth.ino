@@ -335,6 +335,7 @@ void printHelp() {
     Serial.println("  z          Print CPU statistics");
     Serial.println("  t          Run internal tests");
     Serial.println("  S          Stress test (4 notes, FX on)");
+    Serial.println("  k          Isolated module stress test (sequential)");
     Serial.println("  V          List active voices status");
     Serial.println("  ?          Help");
 }
@@ -635,6 +636,48 @@ void processCommand(const String& cmd) {
         case 't':
             SynthesisTests::runAll();
             break;
+        case 'k':
+            Serial.println("Starting Sequential Module Stress Test...");
+
+            synth.allNotesOff();
+            synth.getEffects().setEnabled(false, false, false);
+            synth.getReverb().setEnabled(false);
+            synth.getCompressor().setEnabled(false);
+            synth.setResonatorEnabled(false);
+            synth.setCombEnabled(false);
+            synth.setGranularEnabled(false);
+
+            Serial.println("1. Triggering 4 voices (Clean)...");
+            for (int i = 0; i < NUM_VOICES; i++) synth.noteOn(48 + i * 5, 80);
+            delay(2000);
+
+            Serial.println("2. Adding Saturation + Chorus + Delay...");
+            synth.getEffects().setEnabled(true, true, true);
+            delay(2000);
+
+            Serial.println("3. Adding Reverb...");
+            synth.getReverb().setEnabled(true);
+            delay(2000);
+
+            Serial.println("4. Adding Compressor...");
+            synth.getCompressor().setEnabled(true);
+            delay(2000);
+
+            Serial.println("5. Adding Resonator...");
+            synth.setResonatorEnabled(true);
+            delay(2000);
+
+            Serial.println("6. Adding Comb Filter...");
+            synth.setCombEnabled(true);
+            delay(2000);
+
+            Serial.println("7. Adding Granular Exciter...");
+            synth.setGranularEnabled(true);
+            delay(2000);
+
+            Serial.println("Sequential stress test complete. Still alive!");
+            break;
+
         case 'S':
             Serial.println("Starting Stress Test (Gradual All systems GO)...");
             synth.setSynthMode(VoiceSynthMode::FM);

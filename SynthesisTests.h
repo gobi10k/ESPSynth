@@ -8,6 +8,10 @@
 #include "Envelope.h"
 #include "ModMatrix.h"
 #include "Synthesis.h"
+#include "Reverb.h"
+#include "Resonator.h"
+#include "CombFilter.h"
+#include "Granular.h"
 #include <Arduino.h>
 
 class SynthesisTests {
@@ -22,10 +26,94 @@ public:
         testSync();
         testRingMod();
         testModMatrix();
+
+        Serial.println("\n--- RUNNING STRESS TESTS (100k samples) ---");
+        testReverbStress();
+        testResonatorStress();
+        testCombStress();
+        testGranularStress();
+
         Serial.println("--- ALL TESTS COMPLETED ---\n");
     }
 
 private:
+    static void testReverbStress() {
+        Serial.print("Stress testing Reverb... ");
+        FDNReverb rv;
+        rv.setEnabled(true);
+        rv.setDecay(5.0f);
+        rv.setSize(0.9f);
+        rv.setMix(1.0f);
+
+        bool passed = true;
+        for (int i = 0; i < 100000; i++) {
+            float in = (i % 48000 == 0) ? 1.0f : 0.0f; // Impulse every second
+            float out = rv.process(in);
+            if (isnan(out) || isinf(out)) {
+                passed = false;
+                break;
+            }
+        }
+        Serial.println(passed ? "PASSED" : "FAILED (Instability detected)");
+    }
+
+    static void testResonatorStress() {
+        Serial.print("Stress testing Resonator... ");
+        ResonatorBank rb;
+        rb.setFrequency(110.0f);
+        rb.setResonance(40.0f);
+        rb.setDamping(0.01f);
+        rb.setMix(1.0f);
+
+        bool passed = true;
+        for (int i = 0; i < 100000; i++) {
+            float in = (float)rand() / RAND_MAX * 0.1f; // White noise
+            float out = rb.process(in);
+            if (isnan(out) || isinf(out) || fabsf(out) > 10.0f) {
+                passed = false;
+                break;
+            }
+        }
+        Serial.println(passed ? "PASSED" : "FAILED (Exploded)");
+    }
+
+    static void testCombStress() {
+        Serial.print("Stress testing Comb... ");
+        CombFilter cb;
+        cb.setPitch(55.0f);
+        cb.setFeedback(0.99f);
+        cb.setMix(1.0f);
+
+        bool passed = true;
+        for (int i = 0; i < 100000; i++) {
+            float in = (i == 0) ? 1.0f : 0.0f;
+            float out = cb.process(in);
+            if (isnan(out) || isinf(out)) {
+                passed = false;
+                break;
+            }
+        }
+        Serial.println(passed ? "PASSED" : "FAILED");
+    }
+
+    static void testGranularStress() {
+        Serial.print("Stress testing Granular... ");
+        GranularExciter ge;
+        ge.setDensity(100.0f);
+        ge.setDuration(200.0f);
+        ge.setFreeRunning(true);
+
+        bool passed = true;
+        for (int i = 0; i < 100000; i++) {
+            float out = ge.process();
+            if (isnan(out) || isinf(out)) {
+                passed = false;
+                break;
+            }
+        }
+        Serial.println(passed ? "PASSED" : "FAILED");
+    }
+
     static void testModMatrix() {
         Serial.print("Testing ModMatrix... ");
         ModMatrix mm;
