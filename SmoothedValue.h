@@ -12,12 +12,14 @@ public:
     SmoothedValue(float initialValue = 0.0f, float smoothTimeMs = 5.0f) :
         current_(initialValue),
         target_(initialValue),
-        coef_(0.0f)
+        coef_(0.0f),
+        smoothTime_(smoothTimeMs)
     {
         setSmoothTime(smoothTimeMs);
     }
     
     void setSmoothTime(float ms) {
+        smoothTime_ = ms;
         if (ms <= 0.0f) {
             coef_ = 1.0f;  // Instant
         } else {
@@ -41,12 +43,14 @@ public:
     
     float getCurrent() const { return current_; }
     float getTarget() const { return target_; }
+    float getSmoothTime() const { return smoothTime_; }
     bool isSmoothing() const { return fabsf(target_ - current_) > 0.0001f; }
 
 private:
     float current_;
     float target_;
     float coef_;
+    float smoothTime_;
 };
 
 #endif
