@@ -3,6 +3,7 @@
 #include "Resonator.h"
 #include "CombFilter.h"
 #include "Granular.h"
+#include "Effects.h"
 #include "ModMatrix.h"
 #include "Oscillator.h"
 #include "Filter.h"
