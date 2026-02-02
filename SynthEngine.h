@@ -120,6 +120,7 @@ public:
     float getFilterResonance() const { return filterReso_; }
     FilterMode getFilterMode() const { return filterMode_; }
     VoiceFilterType getFilterType() const { return filterType_; }
+    float getFilterEnvAmount() const { return filterEnvAmount_; }
     float getFilterEnvVelocity() const { return filterEnvVelocity_; }
     float getFilterKeyTracking() const { return filterKeyTracking_; }
     
@@ -251,6 +252,8 @@ private:
     float currentVelocity_;
     volatile bool running_;
     volatile uint32_t blockCounter_ = 0;
+    float voicePanL_[NUM_VOICES];
+    float voicePanR_[NUM_VOICES];
     TaskHandle_t audioTaskHandle_;
     AudioProfiler profiler_;
     int16_t blockBuffer_[DMA_BUFFER_SAMPLES * 2];

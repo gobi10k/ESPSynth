@@ -6,6 +6,7 @@
 #include "Filter.h"
 #include "Arpeggiator.h"
 #include "Voice.h"
+#include "SDManager.h"
 
 constexpr uint8_t NUM_PRESETS = 16;
 constexpr uint32_t PRESET_MAGIC = 0x53594E54;  // "SYNT"
@@ -105,6 +106,10 @@ public:
     // Factory presets
     void loadFactoryPresets();
     static PresetData getInitPreset();
+
+    // SD Card storage
+    bool savePresetToSD(const char* filename, const PresetData& preset, SDManager& sd);
+    bool loadPresetFromSD(const char* filename, PresetData& preset, SDManager& sd);
 
 private:
     uint32_t calculateChecksum(const PresetData& preset);

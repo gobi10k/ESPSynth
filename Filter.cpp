@@ -7,6 +7,8 @@ Filter::Filter() :
     cutoffHz_(1000.0f),
     resonance_(0.0f),
     mode_(FilterMode::LOWPASS),
+    keyTracking_(0.0f),
+    keyFreq_(440.0f),
     cutoffMod_(0.0f),
     fMod_(0.0f),
     q_(1.0f),
@@ -33,8 +35,17 @@ void Filter::setMode(FilterMode mode) {
     mode_ = mode;
 }
 
+void Filter::setKeyTracking(float amount) {
+    keyTracking_ = constrain(amount, 0.0f, 1.0f);
+}
+
 void Filter::updateCoefficients(float modHz) {
-    float modFreq = cutoffHz_ + modHz;
+    float keyOffset = 0.0f;
+    if (keyTracking_ > 0.0f) {
+        keyOffset = (keyFreq_ - 440.0f) * keyTracking_ * 1.5f;
+    }
+
+    float modFreq = cutoffHz_ + modHz + keyOffset;
     modFreq = constrain(modFreq, 20.0f, 20000.0f);
     float normalizedFreq = modFreq / SAMPLE_RATE;
     fMod_ = 2.0f * sinf(M_PI * min(normalizedFreq, 0.45f));

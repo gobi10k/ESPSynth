@@ -11,6 +11,7 @@ enum class DisplayPage : uint8_t {
     OSCILLATORS,
     FILTER,
     EFFECTS,
+    SD_BROWSER,
     NUM_PAGES
 };
 
@@ -40,6 +41,7 @@ private:
     void drawOscPage();
     void drawFilterPage();
     void drawEffectsPage();
+    void drawSDPage();
 
     static void displayTaskWrapper(void* param);
     

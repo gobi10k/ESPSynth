@@ -14,8 +14,8 @@ constexpr uint8_t I2S_DATA_OUT_PIN = 27;
 constexpr uint8_t I2S_MCK_PIN      = 0;
 
 // I2C Display (SH1106 OLED)
-constexpr uint8_t I2C_SDA_PIN = 19;
-constexpr uint8_t I2C_SCL_PIN = 18;
+constexpr uint8_t I2C_SDA_PIN = 21;
+constexpr uint8_t I2C_SCL_PIN = 22;
 
 // ============================================================================
 // AUDIO CONFIGURATION
@@ -80,11 +80,20 @@ constexpr uint8_t POT_EFFECT_PIN = 35;
 // Encoder 1: Navigation
 constexpr uint8_t ENC1_A_PIN  = 36;
 constexpr uint8_t ENC1_B_PIN  = 39;
-constexpr uint8_t ENC1_SW_PIN = 5;
+constexpr uint8_t ENC1_SW_PIN = 15;
 
 // Encoder 2: Value adjustment
 constexpr uint8_t ENC2_A_PIN  = 14;
 constexpr uint8_t ENC2_B_PIN  = 12;
 constexpr uint8_t ENC2_SW_PIN = 13;
+
+// ============================================================================
+// SD CARD CONFIGURATION (SPI)
+// ============================================================================
+
+constexpr uint8_t SD_CS_PIN   = 5;
+constexpr uint8_t SD_SCK_PIN  = 18;
+constexpr uint8_t SD_MISO_PIN = 19;
+constexpr uint8_t SD_MOSI_PIN = 23;
 
 #endif

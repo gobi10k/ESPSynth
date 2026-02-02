@@ -172,6 +172,44 @@ PresetData PresetManager::getInitPreset() {
     return p;
 }
 
+bool PresetManager::savePresetToSD(const char* filename, const PresetData& preset, SDManager& sd) {
+    if (!sd.isAvailable()) return false;
+
+    char path[64];
+    snprintf(path, sizeof(path), "/presets/%s", filename);
+    if (!strcasestr(path, ".sy")) {
+        strncat(path, ".sy", sizeof(path) - strlen(path) - 1);
+    }
+
+    PresetData p = preset;
+    p.checksum = calculateChecksum(p);
+
+    return sd.writeFile(path, (uint8_t*)&p, sizeof(PresetData));
+}
+
+bool PresetManager::loadPresetFromSD(const char* filename, PresetData& preset, SDManager& sd) {
+    if (!sd.isAvailable()) return false;
+
+    char path[64];
+    snprintf(path, sizeof(path), "/presets/%s", filename);
+    if (!strcasestr(path, ".sy")) {
+        strncat(path, ".sy", sizeof(path) - strlen(path) - 1);
+    }
+
+    PresetData p;
+    if (!sd.readFile(path, (uint8_t*)&p, sizeof(PresetData))) {
+        return false;
+    }
+
+    if (p.magic != PRESET_MAGIC || p.checksum != calculateChecksum(p)) {
+        Serial.printf("[Preset] Invalid SD preset: %s\n", path);
+        return false;
+    }
+
+    preset = p;
+    return true;
+}
+
 void PresetManager::loadFactoryPresets() {
     // Preset 0: Init
     PresetData init = getInitPreset();

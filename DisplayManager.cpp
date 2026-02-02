@@ -76,6 +76,7 @@ void DisplayManager::nextPage() {
     int page = (int)currentPage_ + 1;
     if (page >= (int)DisplayPage::NUM_PAGES) page = 0;
     currentPage_ = (DisplayPage)page;
+    selectedItem_ = 0;
 }
 
 void DisplayManager::prevPage() {
@@ -110,8 +111,18 @@ void DisplayManager::adjustValue(int delta) {
     switch (currentPage_) {
         case DisplayPage::OSCILLATORS:
             switch (selectedItem_) {
-                case 0: engine_->setOscWaveform(0, (Waveform)(((int)engine_->getOscWaveform(0) + delta + 7) % 7)); break;
-                case 1: engine_->setOscWaveform(1, (Waveform)(((int)engine_->getOscWaveform(1) + delta + 7) % 7)); break;
+                case 0: {
+                    int wf = (int)engine_->getOscWaveform(0) + delta;
+                    while (wf < 0) wf += 7;
+                    engine_->setOscWaveform(0, (Waveform)(wf % 7));
+                    break;
+                }
+                case 1: {
+                    int wf = (int)engine_->getOscWaveform(1) + delta;
+                    while (wf < 0) wf += 7;
+                    engine_->setOscWaveform(1, (Waveform)(wf % 7));
+                    break;
+                }
                 case 2: engine_->setOscMix(constrain(engine_->getOscMix() + delta * 0.05f, 0.0f, 1.0f)); break;
                 case 3: engine_->setOscDetune(1, constrain(engine_->getOscDetune(1) + delta * 0.5f, -50.0f, 50.0f)); break;
             }
@@ -119,9 +130,19 @@ void DisplayManager::adjustValue(int delta) {
 
         case DisplayPage::FILTER:
             switch (selectedItem_) {
-                case 0: engine_->setFilterType((VoiceFilterType)(((int)engine_->getFilterType() + delta + 2) % 2)); break;
-                case 1: engine_->setFilterMode((FilterMode)(((int)engine_->getFilterMode() + delta + 4) % 4)); break;
-                case 2: engine_->setFilterCutoff(constrain(engine_->getFilterCutoff() * (1.0f + delta * 0.1f), 20.0f, 20000.0f)); break;
+                case 0: {
+                    int ft = (int)engine_->getFilterType() + delta;
+                    while (ft < 0) ft += 2;
+                    engine_->setFilterType((VoiceFilterType)(ft % 2));
+                    break;
+                }
+                case 1: {
+                    int fm = (int)engine_->getFilterMode() + delta;
+                    while (fm < 0) fm += 4;
+                    engine_->setFilterMode((FilterMode)(fm % 4));
+                    break;
+                }
+                case 2: engine_->setFilterCutoff(constrain(engine_->getFilterCutoff() * (1.0f + delta * 0.05f), 20.0f, 20000.0f)); break;
                 case 3: engine_->setFilterResonance(constrain(engine_->getFilterResonance() + delta * 0.05f, 0.0f, 1.0f)); break;
                 case 4: engine_->setFilterKeyTracking(constrain(engine_->getFilterKeyTracking() + delta * 0.1f, 0.0f, 1.0f)); break;
                 case 5: engine_->setFilterEnvVelocity(constrain(engine_->getFilterEnvVelocity() + delta * 0.1f, 0.0f, 1.0f)); break;
@@ -152,6 +173,7 @@ void DisplayManager::drawUI() {
         case DisplayPage::OSCILLATORS: drawOscPage(); break;
         case DisplayPage::FILTER: drawFilterPage(); break;
         case DisplayPage::EFFECTS: drawEffectsPage(); break;
+        case DisplayPage::SD_BROWSER: drawSDPage(); break;
         default: drawMainPage();
     }
 }
@@ -263,6 +285,20 @@ void DisplayManager::drawEffectsPage() {
 
     display_.drawStr(0, 58, selectedItem_ == 3 ? "> REVERB:" : "  REVERB:");
     display_.drawStr(60, 58, engine_->getReverb().isEnabled() ? "ON" : "OFF");
+}
+
+void DisplayManager::drawSDPage() {
+    display_.drawStr(0, 7, "SD CARD STATUS");
+    display_.drawLine(0, 9, 127, 9);
+
+    display_.drawStr(0, 22, "FILE SYSTEM: FAT32");
+    display_.drawStr(0, 34, "STATUS: READY");
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "PRESETS: %d FILES", 12); // Dummy count
+    display_.drawStr(0, 46, buf);
+
+    display_.drawStr(0, 58, "ENCODER 2: BROWSE");
 }
 
 void DisplayManager::displayTaskWrapper(void* param) {

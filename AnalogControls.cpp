@@ -21,10 +21,11 @@ void AnalogControls::init(SynthEngine* engine) {
     analogReadResolution(12);  // 0-4095
     analogSetAttenuation(ADC_11db); // 0-3.3V
 
-    pinMode(POT_CUTOFF_PIN, ANALOG);
-    pinMode(POT_RESO_PIN, ANALOG);
-    pinMode(POT_VOLUME_PIN, ANALOG);
-    pinMode(POT_EFFECT_PIN, ANALOG);
+    // pinMode(..., ANALOG) is not valid on ESP32, INPUT or no pinMode is used for ADC.
+    pinMode(POT_CUTOFF_PIN, INPUT);
+    pinMode(POT_RESO_PIN, INPUT);
+    pinMode(POT_VOLUME_PIN, INPUT);
+    pinMode(POT_EFFECT_PIN, INPUT);
 }
 
 void AnalogControls::readPot(int index, int pin) {

@@ -11,6 +11,8 @@ SynthEngine::SynthEngine() :
     filterMode_(FilterMode::LOWPASS),
     filterType_(VoiceFilterType::SVF),
     filterEnvAmount_(0.5f),
+    filterEnvVelocity_(0.5f),
+    filterKeyTracking_(0.5f),
     ampA_(0.01f), ampD_(0.1f), ampS_(0.7f), ampR_(0.3f),
     fltA_(0.01f), fltD_(0.2f), fltS_(0.3f), fltR_(0.5f),
     glideTime_(0.0f),
@@ -177,10 +179,16 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
     voices_[voice].setOscMix(oscMix_);
     voices_[voice].setSynthMode(synthMode_);
     voices_[voice].setFMAmount(fmAmount_);
+    voices_[voice].setFilterType(filterType_);
     voices_[voice].setFilterCutoff(filterCutoff_);
     voices_[voice].setFilterResonance(filterReso_);
+    voices_[voice].setFilterMode(filterMode_);
+    voices_[voice].setFilterEnvAmount(filterEnvAmount_);
+    voices_[voice].setFilterEnvVelocity(filterEnvVelocity_);
+    voices_[voice].setFilterKeyTracking(filterKeyTracking_);
     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
-    
+    voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
+
     // Combine spread and global pan
     float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
     voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
@@ -387,6 +395,12 @@ void SynthEngine::processBlock() {
             voices_[v].setGlobalFilterMod(filterMod);
             voices_[v].setGlobalPitchMod(pitchMod);
             voices_[v].updateBlockParams();
+
+            // Pre-calculate panning coefficients
+            float pan = voices_[v].getPan();
+            float panAngle = (pan + 1.0f) * 0.785398f;
+            voicePanL_[v] = cosf(panAngle);
+            voicePanR_[v] = sinf(panAngle);
         }
     }
     // --------------------------------------------------
@@ -415,6 +429,8 @@ void SynthEngine::processBlock() {
                     voices_[voice].setFilterResonance(filterReso_);
                     voices_[voice].setFilterMode(filterMode_);
                     voices_[voice].setFilterEnvAmount(filterEnvAmount_);
+                    voices_[voice].setFilterEnvVelocity(filterEnvVelocity_);
+                    voices_[voice].setFilterKeyTracking(filterKeyTracking_);
                     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
                     voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
                     voices_[voice].setGlideTime(glideTime_);
@@ -455,11 +471,8 @@ void SynthEngine::processBlock() {
                 if (voiceSample > 1.0f) voiceSample = 1.0f;
                 if (voiceSample < -1.0f) voiceSample = -1.0f;
 
-                float pan = voices_[v].getPan();
-                // Constant power panning approx
-                float panAngle = (pan + 1.0f) * 0.785398f;
-                left += voiceSample * cosf(panAngle);
-                right += voiceSample * sinf(panAngle);
+                left += voiceSample * voicePanL_[v];
+                right += voiceSample * voicePanR_[v];
             }
         }
         

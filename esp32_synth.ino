@@ -23,12 +23,14 @@
 #include "SynthesisTests.h"
 #include "AnalogControls.h"
 #include "HardwareEncoder.h"
+#include "SDManager.h"
 
 SynthEngine synth;
 MIDIHandler midi;
 PresetManager presets;
 DisplayManager display;
 AnalogControls controls;
+SDManager sd;
 HardwareEncoder encNav(ENC1_A_PIN, ENC1_B_PIN, ENC1_SW_PIN);
 HardwareEncoder encVal(ENC2_A_PIN, ENC2_B_PIN, ENC2_SW_PIN);
 
@@ -254,6 +256,9 @@ void setup() {
         while (1) delay(1000);
     }
     
+    // Setup SD card
+    sd.begin(SD_CS_PIN);
+
     // Setup controls
     controls.init(&synth);
     encNav.init();
@@ -367,10 +372,15 @@ void printHelp() {
     Serial.println("  Kx         Toggle compressor");
     Serial.println("  Kt/Kr/Ka   Comp thresh/ratio/attack");
     Serial.println("");
+    Serial.println("-- SD Card --");
+    Serial.println("  Dl         List SD files");
+    Serial.println("  Ds<slot>   Save preset to SD");
+    Serial.println("  DL<slot>   Load preset from SD");
+    Serial.println("");
     Serial.println("-- Presets --");
-    Serial.println("  P          List presets");
-    Serial.println("  P<0-15>    Load preset");
-    Serial.println("  PS<0-15>   Save to slot");
+    Serial.println("  P          List internal presets");
+    Serial.println("  P<0-15>    Load internal preset");
+    Serial.println("  PS<0-15>   Save to internal slot");
     Serial.println("  PF         Load factory presets");
     Serial.println("");
     Serial.println("-- Other --");
@@ -378,6 +388,7 @@ void printHelp() {
     Serial.println("  v<0-99>    Master volume %");
     Serial.println("  z          Print CPU statistics");
     Serial.println("  p          Toggle auto CPU stats");
+    Serial.println("  pn/pp      Display: Next/Prev Page");
     Serial.println("  t          Run internal tests");
     Serial.println("  S          Stress test (4 notes, FX on)");
     Serial.println("  k          Isolated module stress test (sequential)");
@@ -650,6 +661,30 @@ void processCommand(const String& cmd) {
             }
             break;
             
+        // === DISK (SD CARD) ===
+        case 'D':
+            if (c1 == 'l') {
+                sd.listFiles();
+            } else if (c1 == 's') {
+                int slot = (int)value;
+                PresetData p = createPresetFromCurrent("SD_Save");
+                char filename[32];
+                snprintf(filename, sizeof(filename), "preset_%d", slot);
+                if (presets.savePresetToSD(filename, p, sd)) {
+                    Serial.printf("Saved to SD: %s\n", filename);
+                }
+            } else if (c1 == 'L') {
+                int slot = (int)value;
+                PresetData p;
+                char filename[32];
+                snprintf(filename, sizeof(filename), "preset_%d", slot);
+                if (presets.loadPresetFromSD(filename, p, sd)) {
+                    applyPreset(p);
+                    Serial.printf("Loaded from SD: %s\n", filename);
+                }
+            }
+            break;
+
         // === PRESETS ===
         case 'P':
             if (c1 == 'F') {

@@ -26,6 +26,8 @@ public:
     void setCutoff(float hz);
     void setResonance(float q);  // 0-1, self-oscillates near 1
     void setMode(FilterMode mode);
+    void setKeyTracking(float amount);
+    void setKeyFreq(float hz) { keyFreq_ = hz; }
     
     float getCutoff() const { return cutoffHz_; }
     float getResonance() const { return resonance_; }
@@ -49,6 +51,8 @@ private:
     float cutoffHz_;
     float resonance_;
     FilterMode mode_;
+    float keyTracking_;
+    float keyFreq_;
     
     float cutoffMod_;
     
