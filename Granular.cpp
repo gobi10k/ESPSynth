@@ -7,6 +7,7 @@
 const char* GRAIN_SOURCE_NAMES[] = {"NOI", "SIN", "IMP", "TRI", "DST"};
 
 float GranularExciter::hannTable_[WINDOW_TABLE_SIZE];
+float GranularExciter::expTable_[WINDOW_TABLE_SIZE];
 bool GranularExciter::tablesInitialized_ = false;
 
 GranularExciter::GranularExciter() :
@@ -29,7 +30,9 @@ GranularExciter::GranularExciter() :
 
     if (!tablesInitialized_) {
         for (int i = 0; i < WINDOW_TABLE_SIZE; i++) {
-            hannTable_[i] = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (WINDOW_TABLE_SIZE - 1)));
+            float pos = (float)i / (WINDOW_TABLE_SIZE - 1);
+            hannTable_[i] = 0.5f * (1.0f - cosf(2.0f * M_PI * pos));
+            expTable_[i] = fastExp(-4.0f * pos) * (1.0f - fastExp(-20.0f * pos));
         }
         tablesInitialized_ = true;
     }
@@ -109,78 +112,6 @@ void GranularExciter::spawnGrain() {
     trigger();
 }
 
-float GranularExciter::getWindow(float position, GrainWindow window) {
-    // position: 0 to 1 through grain lifetime
-    if (position < 0.0f || isnan(position)) position = 0.0f;
-    else if (position > 1.0f) position = 1.0f;
-
-    switch (window) {
-        case GrainWindow::HANN:
-        case GrainWindow::BLACKMAN: {
-            int idx = (int)(position * (WINDOW_TABLE_SIZE - 1));
-            return hannTable_[idx];
-        }
-            
-        case GrainWindow::TRIANGLE:
-            return (position < 0.5f) ? (2.0f * position) : (2.0f - 2.0f * position);
-            
-        case GrainWindow::RECTANGULAR:
-            return 1.0f;
-            
-        case GrainWindow::EXPONENTIAL:
-            return fastExp(-4.0f * position) * (1.0f - fastExp(-20.0f * position));
-            
-        default:
-            return 1.0f;
-    }
-}
-
-float GranularExciter::getSourceSample(Grain& grain) {
-    switch (grain.source) {
-        case GrainSource::NOISE:
-            return fastRandFloat(noiseState_);
-            
-        case GrainSource::SINE:
-            return Wavetables::readSine(grain.phase);
-            
-        case GrainSource::IMPULSE:
-            return (grain.position < 1.0f) ? 1.0f : 0.0f;
-            
-        case GrainSource::TRIANGLE:
-            return Wavetables::readTriangle(grain.phase, 2);
-            
-        case GrainSource::DUST:
-            if (fastRandFloat01(noiseState_) < dustProb_ * 10.0f) {
-                return fastRandFloat(noiseState_);
-            }
-            return 0.0f;
-            
-        default:
-            return 0.0f;
-    }
-}
-
-float GranularExciter::processGrain(Grain& grain) {
-    // Get source sample
-    float sample = getSourceSample(grain);
-    
-    // Apply window
-    float windowedPos = grain.position * grain.invDuration;
-    float window = getWindow(windowedPos, grain.window);
-    
-    sample *= window * grain.amplitude;
-    
-    // Advance grain
-    grain.phase += grain.phaseIncrement;
-    grain.position += 1.0f;
-    
-    // Check if grain is complete
-    if (grain.position >= grain.duration) {
-        grain.active = false;
-    }
-    
-    return sample;
-}
 
 float GranularExciter::process() {
     // Auto-spawn grains in free-running mode
@@ -192,11 +123,65 @@ float GranularExciter::process() {
         }
     }
     
-    // Sum all active grains
+    // Sum all active grains - massively optimized per-sample path
     float output = 0.0f;
     for (int i = 0; i < MAX_GRAINS; i++) {
-        if (grains_[i].active) {
-            output += processGrain(grains_[i]);
+        Grain& g = grains_[i];
+        if (!g.active) continue;
+
+        // 1. Get Source Sample
+        float sample = 0.0f;
+        switch (g.source) {
+            case GrainSource::NOISE:
+                sample = fastRandFloat(noiseState_);
+                break;
+            case GrainSource::SINE:
+                sample = Wavetables::readSine(g.phase);
+                break;
+            case GrainSource::IMPULSE:
+                sample = (g.position < 1.0f) ? 1.0f : 0.0f;
+                break;
+            case GrainSource::TRIANGLE:
+                sample = Wavetables::readTriangle(g.phase, 2);
+                break;
+            case GrainSource::DUST:
+                if (fastRandFloat01(noiseState_) < dustProb_ * 10.0f) {
+                    sample = fastRandFloat(noiseState_);
+                }
+                break;
+            default: break;
+        }
+
+        // 2. Apply Window
+        float windowedPos = g.position * g.invDuration;
+        int winIdx = (int)(windowedPos * (WINDOW_TABLE_SIZE - 1));
+        if (winIdx < 0) winIdx = 0; else if (winIdx >= WINDOW_TABLE_SIZE) winIdx = WINDOW_TABLE_SIZE - 1;
+
+        float window = 1.0f;
+        switch (g.window) {
+            case GrainWindow::HANN:
+            case GrainWindow::BLACKMAN:
+                window = hannTable_[winIdx];
+                break;
+            case GrainWindow::TRIANGLE:
+                window = (windowedPos < 0.5f) ? (2.0f * windowedPos) : (2.0f - 2.0f * windowedPos);
+                break;
+            case GrainWindow::EXPONENTIAL:
+                window = expTable_[winIdx];
+                break;
+            case GrainWindow::RECTANGULAR:
+            default:
+                window = 1.0f;
+                break;
+        }
+
+        output += sample * window * g.amplitude;
+
+        // 3. Advance Grain
+        g.phase += g.phaseIncrement;
+        g.position += 1.0f;
+        if (g.position >= g.duration) {
+            g.active = false;
         }
     }
     

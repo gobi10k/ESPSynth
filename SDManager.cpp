@@ -7,22 +7,29 @@ SDManager::SDManager() : available_(false), csPin_(SD_CS_PIN) {
 bool SDManager::begin(uint8_t csPin) {
     csPin_ = csPin;
 
-    // Explicitly configure CS pin
+    // 1. Explicitly configure CS pin and disable it initially
     pinMode(csPin_, OUTPUT);
     digitalWrite(csPin_, HIGH);
 
-    // Initialize SPI for SD card
-    Serial.println("[SD] SPI Begin...");
-    SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, csPin_);
-    delay(200); // Give it more time to settle
+    // Ensure MISO is input with pullup to prevent floating when SD is not selected
+    pinMode(SD_MISO_PIN, INPUT_PULLUP);
 
-    // Use a much lower frequency for better compatibility (1MHz)
-    Serial.println("[SD] Attempting initialization at 1MHz...");
-    if (!SD.begin(csPin_, SPI, 1000000, "/sd", 5)) {
-        Serial.println("[SD] Initialization failed at 1MHz! Trying 400kHz...");
+    // 2. Initialize SPI with explicit pins and longer settle time
+    Serial.println("[SD] Initializing SPI (VSPI)...");
+    SPI.end(); // Reset SPI if it was already running
+    SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, csPin_);
+    delay(500); // Settle delay
+
+    // 3. Robust initialization sequence
+    // Start with 400kHz for highest compatibility during initial handshake
+    Serial.println("[SD] Attempting initialization at 400kHz (Handshake)...");
+    if (!SD.begin(csPin_, SPI, 400000, "/sd", 5)) {
+        Serial.println("[SD] Failed at 400kHz. Retrying with explicit SPI instance reset...");
+        SPI.end();
+        SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, csPin_);
         delay(500);
         if (!SD.begin(csPin_, SPI, 400000, "/sd", 5)) {
-            Serial.println("[SD] Initialization failed at 400kHz!");
+            Serial.println("[SD] SD.begin failed after retry.");
             available_ = false;
             return false;
         }

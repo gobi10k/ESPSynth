@@ -103,28 +103,4 @@ void Oscillator::sync() {
     phase_ = 0;
 }
 
-float Oscillator::generateSupersaw() {
-    // Safety check
-    if (effectiveIncrement_ == 0) return 0.0f;
-    if (tableIndex_ < 0 || tableIndex_ >= NUM_OCTAVE_TABLES) {
-        tableIndex_ = 0;
-    }
-    
-    float sum = 0.0f;
-    
-    for (int i = 0; i < 7; i++) {
-        supersawPhases_[i] += effectiveSupersawIncrements_[i];
-        sum += Wavetables::readSaw(supersawPhases_[i], tableIndex_);
-    }
-    
-    return sum * 0.143f;  // 1/7 = 0.143
-}
-
-float Oscillator::generateNoise() {
-    // Simple xorshift PRNG for white noise
-    noiseState_ ^= noiseState_ << 13;
-    noiseState_ ^= noiseState_ >> 17;
-    noiseState_ ^= noiseState_ << 5;
-    return (float)(int32_t)noiseState_ / (float)INT32_MAX;
-}
 

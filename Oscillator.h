@@ -83,11 +83,23 @@ public:
     void setPhase(float phase);
     void sync();
 
+    inline float generateSupersaw() {
+        if (effectiveIncrement_ == 0) return 0.0f;
+        float sum = 0.0f;
+        for (int i = 0; i < 7; i++) {
+            supersawPhases_[i] += effectiveSupersawIncrements_[i];
+            sum += Wavetables::readSaw(supersawPhases_[i], tableIndex_);
+        }
+        return sum * 0.143f;
+    }
+
+    inline float generateNoise() {
+        return fastRandFloat(noiseState_);
+    }
+
 private:
     void updatePhaseIncrement();
     void updateEffectiveIncrements();
-    float generateSupersaw();
-    float generateNoise();
     
     uint32_t phase_;
     uint32_t effectiveIncrement_;

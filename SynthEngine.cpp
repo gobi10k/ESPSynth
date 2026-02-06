@@ -467,16 +467,29 @@ void SynthEngine::processBlock() {
             lastArpGate_ = arp_.isGateOn();
         }
         
-        // Mix all voices with panning
+        // Mix all voices with panning - unrolled for 4 voices
         float left = 0.0f;
         float right = 0.0f;
 
-        for (int v = 0; v < NUM_VOICES; v++) {
-            if (voices_[v].isActive()) {
-                float s = voices_[v].process();
-                left += s * voicePanL_[v];
-                right += s * voicePanR_[v];
-            }
+        if (voices_[0].isActive()) {
+            float s = voices_[0].process();
+            left += s * voicePanL_[0];
+            right += s * voicePanR_[0];
+        }
+        if (voices_[1].isActive()) {
+            float s = voices_[1].process();
+            left += s * voicePanL_[1];
+            right += s * voicePanR_[1];
+        }
+        if (voices_[2].isActive()) {
+            float s = voices_[2].process();
+            left += s * voicePanL_[2];
+            right += s * voicePanR_[2];
+        }
+        if (voices_[3].isActive()) {
+            float s = voices_[3].process();
+            left += s * voicePanL_[3];
+            right += s * voicePanR_[3];
         }
         
         // Scale down for mixing
@@ -538,6 +551,9 @@ void SynthEngine::processBlock() {
     profiler_.endSample();
     size_t bytesWritten;
     i2s_channel_write(tx_handle_, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
+
+    // Yield to allow other tasks (Core 0/1) and watchdog to run if CPU is saturated
+    vTaskDelay(0);
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {

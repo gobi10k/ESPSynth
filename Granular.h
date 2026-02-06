@@ -86,9 +86,6 @@ public:
 
 private:
     void spawnGrain();
-    float processGrain(Grain& grain);
-    float getWindow(float position, GrainWindow window);
-    float getSourceSample(Grain& grain);
     
     // Parameters
     float density_;
@@ -104,8 +101,9 @@ private:
     // Grain pool
     Grain grains_[MAX_GRAINS];
     
-    // Window table
+    // Window tables
     static float hannTable_[WINDOW_TABLE_SIZE];
+    static float expTable_[WINDOW_TABLE_SIZE];
     static bool tablesInitialized_;
 
     // Timing
