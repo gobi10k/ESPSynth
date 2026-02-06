@@ -9,6 +9,7 @@ AnalogControls::AnalogControls() :
         historyIndex_[i] = 0;
         lastValues_[i] = -1;
         currentValues_[i] = 0;
+        potSums_[i] = 0;
         for (int j = 0; j < HISTORY_SIZE; j++) {
             potHistory_[i][j] = 0;
         }
@@ -31,15 +32,13 @@ void AnalogControls::init(SynthEngine* engine) {
 void AnalogControls::readPot(int index, int pin) {
     int raw = analogRead(pin);
 
-    // Smooth using moving average
+    // Smooth using running sum moving average
+    potSums_[index] -= potHistory_[index][historyIndex_[index]];
     potHistory_[index][historyIndex_[index]] = raw;
-    historyIndex_[index] = (historyIndex_[index] + 1) % HISTORY_SIZE;
+    potSums_[index] += raw;
 
-    int sum = 0;
-    for (int i = 0; i < HISTORY_SIZE; i++) {
-        sum += potHistory_[index][i];
-    }
-    currentValues_[index] = sum / HISTORY_SIZE;
+    historyIndex_[index] = (historyIndex_[index] + 1) % HISTORY_SIZE;
+    currentValues_[index] = potSums_[index] / HISTORY_SIZE;
 }
 
 void AnalogControls::update() {

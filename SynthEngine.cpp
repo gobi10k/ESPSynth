@@ -109,7 +109,7 @@ void SynthEngine::start() {
         "SynthTask",
         20480,  // Further increased stack size to 20KB
         this,
-        configMAX_PRIORITIES - 1,
+        configMAX_PRIORITIES - 3, // Slightly lower than max to prevent core starvation
         &audioTaskHandle_,
         1
     );

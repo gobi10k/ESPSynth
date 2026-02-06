@@ -22,6 +22,7 @@ private:
     static constexpr int HISTORY_SIZE = 32; // Increased for better smoothing
 
     int potHistory_[NUM_POTS][HISTORY_SIZE];
+    int potSums_[NUM_POTS];
     int historyIndex_[NUM_POTS];
     int lastValues_[NUM_POTS];
     int currentValues_[NUM_POTS];

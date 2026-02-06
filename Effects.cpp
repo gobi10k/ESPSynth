@@ -173,8 +173,13 @@ void Chorus::clear() {
 float Chorus::process(float input) {
     if (isnan(input) || isinf(input)) return 0.0f;
     
+    // Clamp to prevent overflow before conversion to int16
+    float clamped = input;
+    if (clamped > 1.0f) clamped = 1.0f;
+    else if (clamped < -1.0f) clamped = -1.0f;
+
     // Write to buffer (convert to int16)
-    buffer_[writePos_] = (int16_t)(input * 32000.0f);
+    buffer_[writePos_] = (int16_t)(clamped * 32000.0f);
     
     // LFO using wavetable (much faster than sinf)
     float lfoValue = Wavetables::readSine(lfoPhase_);

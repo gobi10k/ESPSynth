@@ -15,8 +15,9 @@ bool SDManager::begin(uint8_t csPin) {
         Serial.println("[SD] Initialization failed! Trying 10MHz...");
         if (!SD.begin(csPin_, SPI, 10000000)) {
             Serial.println("[SD] Initialization failed at 10MHz!");
-        available_ = false;
-        return false;
+            available_ = false;
+            return false;
+        }
     }
 
     uint8_t cardType = SD.cardType();

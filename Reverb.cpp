@@ -100,7 +100,10 @@ void FDNReverb::processStereo(float input, float& left, float& right) {
     if (preReadPos < 0) preReadPos += PREDELAY_MAX;
 
     int16_t preDelayed = preDelayBuffer_[preReadPos];
-    preDelayBuffer_[preDelayPos_] = (int16_t)(input * 32000.0f);
+    float clampedInput = input;
+    if (clampedInput > 1.0f) clampedInput = 1.0f;
+    else if (clampedInput < -1.0f) clampedInput = -1.0f;
+    preDelayBuffer_[preDelayPos_] = (int16_t)(clampedInput * 32000.0f);
     preDelayPos_++;
     if (preDelayPos_ >= PREDELAY_MAX) preDelayPos_ = 0;
     
