@@ -240,6 +240,7 @@ PresetData createPresetFromCurrent(const char* name) {
 
 void setup() {
     Serial.begin(115200);
+    Serial.setRxBufferSize(1024);
     delay(1000);
     
     Serial.println("\n=== ESP32 Synth v5 - Resonant Spectral Engine ===\n");
@@ -258,12 +259,32 @@ void setup() {
     
     // Setup SD card
     if (sd.begin(SD_CS_PIN)) {
-        Serial.println("[SD] Creating welcome file...");
+        Serial.println("[SD] Initializing filesystem...");
         const char* welcomeMsg = "=== ESP32 Synth v5 ===\nWelcome to your SD card!\nPresets are stored here.\n";
-        if (sd.writeFile("/welcome.txt", (const uint8_t*)welcomeMsg, strlen(welcomeMsg))) {
-            Serial.println("[SD] Welcome file created successfully.");
-        } else {
-            Serial.println("[SD] Failed to create welcome file.");
+        sd.writeFile("/welcome.txt", (const uint8_t*)welcomeMsg, strlen(welcomeMsg));
+
+        // Create presets directory if not exists
+        if (!sd.exists("/presets")) {
+            Serial.println("[SD] Creating /presets directory...");
+            SD.mkdir("/presets");
+        }
+
+        // Populate with a few test presets if empty
+        File pDir = SD.open("/presets");
+        if (pDir && pDir.isDirectory()) {
+            File first = pDir.openNextFile();
+            if (!first) {
+                Serial.println("[SD] Populating test presets...");
+                for (int i = 0; i < 3; i++) {
+                    PresetData p = PresetManager::getInitPreset();
+                    snprintf(p.name, 15, "SD Test %d", i);
+                    char fname[32];
+                    snprintf(fname, 32, "test_%d", i);
+                    presets.savePresetToSD(fname, p, sd);
+                }
+            }
+            if (first) first.close();
+            pDir.close();
         }
     } else {
         Serial.println("[SD] Card NOT detected or initialization failed.");

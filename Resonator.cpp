@@ -164,23 +164,24 @@ float ResonatorBank::processResonator(int index, float input) {
 }
 
 float ResonatorBank::process(float input) {
+    if (isnan(input) || isinf(input)) return 0.0f;
+
     applyDirtyCoefficients();
 
-    // Sum all resonators
+    // Sum all resonators - unrolled for performance
     float resonated = 0.0f;
     
-    for (int i = 0; i < MAX_RESONATORS; i++) {
-        float partial = processResonator(i, input) * gains_[i];
-        resonated += partial;
-    }
+    // Partials 0-5
+    resonated += processResonator(0, input) * gains_[0];
+    resonated += processResonator(1, input) * gains_[1];
+    resonated += processResonator(2, input) * gains_[2];
+    resonated += processResonator(3, input) * gains_[3];
+    resonated += processResonator(4, input) * gains_[4];
+    resonated += processResonator(5, input) * gains_[5];
     
-    // Normalize by number of active resonators
+    // Normalize and filter
     resonated *= 0.4f;
-    
-    // Apply brightness filter (one-pole lowpass)
     brightnessState_ += brightnessCoef_ * (resonated - brightnessState_);
-    resonated = brightnessState_;
     
-    // Mix dry/wet
-    return input * (1.0f - mix_) + resonated * mix_;
+    return input + mix_ * (brightnessState_ - input);
 }

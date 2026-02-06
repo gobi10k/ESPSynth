@@ -88,13 +88,13 @@ void GranularExciter::trigger(float pitch, float amp) {
             g.window = window_;
             
             // Duration with randomization
-            float durationVariation = 1.0f + (fastRandFloat() - 0.5f) * 2.0f * durationSpread_;
-            g.duration = (durationMs_ / 1000.0f) * SAMPLE_RATE * durationVariation;
+            float durationVariation = 1.0f + fastRandFloat(noiseState_) * durationSpread_;
+            g.duration = (durationMs_ * 0.001f) * SAMPLE_RATE * durationVariation;
             g.duration = max(10.0f, g.duration);
             
             // Pitch with randomization
-            float pitchVariation = (fastRandFloat() - 0.5f) * 2.0f * pitchSpread_;
-            float grainPitch = pitch * powf(2.0f, pitchVariation / 12.0f);
+            float pitchVariation = fastRandFloat(noiseState_) * pitchSpread_;
+            float grainPitch = pitch * fastExp2(pitchVariation / 12.0f);
             g.phaseIncrement = (uint32_t)(grainPitch * PHASE_INCREMENT_MULTIPLIER);
             g.phase = 0;
             
@@ -110,25 +110,23 @@ void GranularExciter::spawnGrain() {
 float GranularExciter::getWindow(float position, GrainWindow window) {
     // position: 0 to 1 through grain lifetime
     if (position < 0.0f || isnan(position)) position = 0.0f;
-    if (position > 1.0f) position = 1.0f;
-
-    int idx = (int)(position * (WINDOW_TABLE_SIZE - 1));
-    if (idx < 0) idx = 0;
-    if (idx >= WINDOW_TABLE_SIZE) idx = WINDOW_TABLE_SIZE - 1;
+    else if (position > 1.0f) position = 1.0f;
 
     switch (window) {
         case GrainWindow::HANN:
-        case GrainWindow::BLACKMAN:
+        case GrainWindow::BLACKMAN: {
+            int idx = (int)(position * (WINDOW_TABLE_SIZE - 1));
             return hannTable_[idx];
+        }
             
         case GrainWindow::TRIANGLE:
-            return (position < 0.5f) ? (2.0f * position) : (2.0f * (1.0f - position));
+            return (position < 0.5f) ? (2.0f * position) : (2.0f - 2.0f * position);
             
         case GrainWindow::RECTANGULAR:
             return 1.0f;
             
         case GrainWindow::EXPONENTIAL:
-            return expf(-4.0f * position) * (1.0f - expf(-20.0f * position));
+            return fastExp(-4.0f * position) * (1.0f - fastExp(-20.0f * position));
             
         default:
             return 1.0f;
@@ -138,7 +136,7 @@ float GranularExciter::getWindow(float position, GrainWindow window) {
 float GranularExciter::getSourceSample(Grain& grain) {
     switch (grain.source) {
         case GrainSource::NOISE:
-            return (float)((int32_t)fastRand()) / (float)INT32_MAX;
+            return fastRandFloat(noiseState_);
             
         case GrainSource::SINE:
             return Wavetables::readSine(grain.phase);
@@ -146,15 +144,12 @@ float GranularExciter::getSourceSample(Grain& grain) {
         case GrainSource::IMPULSE:
             return (grain.position < 1.0f) ? 1.0f : 0.0f;
             
-        case GrainSource::TRIANGLE: {
-            // Use Wavetables::readTriangle for consistency and speed
-            return Wavetables::readTriangle(grain.phase, 2); // Use mid-range table
-        }
+        case GrainSource::TRIANGLE:
+            return Wavetables::readTriangle(grain.phase, 2);
             
         case GrainSource::DUST:
-            // Random sparse impulses
-            if (fastRandFloat() < dustProb_ * 10.0f) { // Adjusted sensitivity
-                return (fastRandFloat() * 2.0f - 1.0f);
+            if (fastRandFloat(noiseState_) < dustProb_ * 10.0f) {
+                return fastRandFloat(noiseState_);
             }
             return 0.0f;
             

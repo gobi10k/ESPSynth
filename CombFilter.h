@@ -59,6 +59,7 @@ private:
     float allpassCoef_;
     float exciteLevel_;
     int exciteCounter_;
+    uint32_t noiseState_;
     float lastDelayed_;  // For K-S averaging
 };
 

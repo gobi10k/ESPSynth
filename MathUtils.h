@@ -49,4 +49,18 @@ inline float fastLog2(float x) {
     return y - 126.94269504f;
 }
 
+/**
+ * Fast PRNG (Xorshift)
+ */
+inline uint32_t fastRand(uint32_t& state) {
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return state;
+}
+
+inline float fastRandFloat(uint32_t& state) {
+    return (float)(int32_t)fastRand(state) / (float)INT32_MAX;
+}
+
 #endif

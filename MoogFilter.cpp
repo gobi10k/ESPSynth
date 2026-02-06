@@ -49,28 +49,30 @@ void MoogFilter::reset() {
 float MoogFilter::process(float input) {
     if (isnan(input) || isinf(input)) input = 0.0f;
     
-    // Calculate feedback amount (resonance)
-    // 4.0 is the maximum for self-oscillation
     float feedback = resonance_ * 4.0f;
-    
-    // Apply drive (pre-saturation)
     input *= drive_;
     
     // Feedback with saturation
-    float feedbackSample = fastTanh(delay_[3] * feedback);
-    input -= feedbackSample;
+    input -= fastTanh(delay_[3] * feedback);
     
-    // Four cascaded one-pole lowpass filters
-    for (int i = 0; i < 4; i++) {
-        stage_[i] = gMod_ * fastTanh(input) + invGMod_ * delay_[i];
-        delay_[i] = stage_[i];
-        input = stage_[i];
-    }
+    // Four cascaded one-pole lowpass filters - unrolled
+    float in = fastTanh(input);
+    stage_[0] = gMod_ * in + invGMod_ * delay_[0];
+    delay_[0] = stage_[0];
     
-    // Compensate for resonance gain loss
+    in = fastTanh(stage_[0]);
+    stage_[1] = gMod_ * in + invGMod_ * delay_[1];
+    delay_[1] = stage_[1];
+    
+    in = fastTanh(stage_[1]);
+    stage_[2] = gMod_ * in + invGMod_ * delay_[2];
+    delay_[2] = stage_[2];
+
+    in = fastTanh(stage_[2]);
+    stage_[3] = gMod_ * in + invGMod_ * delay_[3];
+    delay_[3] = stage_[3];
+
     float output = stage_[3] * (1.0f + feedback * 0.3f);
-    
-    // Output saturation
     output = fastTanh(output);
 
     if (isnan(output) || isinf(output)) {
@@ -186,49 +188,49 @@ void LadderFilter::reset() {
 }
 
 float LadderFilter::process(float input) {
-    // Safety check input
     if (isnan(input) || isinf(input)) input = 0.0f;
     
-    // Feedback - limit to prevent instability
-    float feedback = resonance_ * 3.5f;  // Reduced from 4.0
-    
-    // Apply drive
+    float feedback = resonance_ * 3.5f;
     float in = input * drive_;
     
-    // Clamp before feedback
     if (in > 2.0f) in = 2.0f;
-    if (in < -2.0f) in = -2.0f;
+    else if (in < -2.0f) in = -2.0f;
     
-    // Feedback with saturation
     float fb = delay_[3] * feedback;
     if (fb > 1.0f) fb = 1.0f;
-    if (fb < -1.0f) fb = -1.0f;
+    else if (fb < -1.0f) fb = -1.0f;
     in -= fb;
     
-    // Four stages with clamping
+    // Four stages - unrolled
     float stageIn = in;
-    for (int i = 0; i < 4; i++) {
-        // Soft saturation
-        if (stageIn > 1.5f) stageIn = 1.5f;
-        if (stageIn < -1.5f) stageIn = -1.5f;
-        
-        stage_[i] = gMod_ * stageIn + invGMod_ * delay_[i];
-        delay_[i] = stage_[i];
-        stageIn = stage_[i];
-    }
-    
-    // Mix stages according to mode taps
-    float output = taps_[0] * in;
-    for (int i = 0; i < 4; i++) {
-        output += taps_[i + 1] * stage_[i];
-    }
-    
-    // Resonance gain compensation
+    if (stageIn > 1.5f) stageIn = 1.5f;
+    else if (stageIn < -1.5f) stageIn = -1.5f;
+    stage_[0] = gMod_ * stageIn + invGMod_ * delay_[0];
+    delay_[0] = stage_[0];
+
+    stageIn = stage_[0];
+    if (stageIn > 1.5f) stageIn = 1.5f;
+    else if (stageIn < -1.5f) stageIn = -1.5f;
+    stage_[1] = gMod_ * stageIn + invGMod_ * delay_[1];
+    delay_[1] = stage_[1];
+
+    stageIn = stage_[1];
+    if (stageIn > 1.5f) stageIn = 1.5f;
+    else if (stageIn < -1.5f) stageIn = -1.5f;
+    stage_[2] = gMod_ * stageIn + invGMod_ * delay_[2];
+    delay_[2] = stage_[2];
+
+    stageIn = stage_[2];
+    if (stageIn > 1.5f) stageIn = 1.5f;
+    else if (stageIn < -1.5f) stageIn = -1.5f;
+    stage_[3] = gMod_ * stageIn + invGMod_ * delay_[3];
+    delay_[3] = stage_[3];
+
+    float output = taps_[0] * in + taps_[1] * stage_[0] + taps_[2] * stage_[1] + taps_[3] * stage_[2] + taps_[4] * stage_[3];
     output *= (1.0f + feedback * 0.15f);
     
-    // Final clamp
     if (output > 1.0f) output = 1.0f;
-    if (output < -1.0f) output = -1.0f;
+    else if (output < -1.0f) output = -1.0f;
     
     if (isnan(output) || isinf(output)) {
         reset();
