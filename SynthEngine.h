@@ -15,6 +15,7 @@
 #include "Euclidean.h"
 #include "Resonator.h"
 #include "CombFilter.h"
+#include <driver/i2s_std.h>
 
 constexpr uint8_t NUM_VOICES = 4;
 
@@ -255,6 +256,7 @@ private:
     float voicePanL_[NUM_VOICES];
     float voicePanR_[NUM_VOICES];
     TaskHandle_t audioTaskHandle_;
+    i2s_chan_handle_t tx_handle_;
     AudioProfiler profiler_;
     int16_t blockBuffer_[DMA_BUFFER_SAMPLES * 2];
 };
