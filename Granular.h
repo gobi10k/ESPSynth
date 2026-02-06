@@ -2,6 +2,7 @@
 #define GRANULAR_H
 
 #include "Config.h"
+#include "MathUtils.h"
 
 /**
  * Granular Exciter
@@ -88,18 +89,6 @@ private:
     float getWindow(float position, GrainWindow window);
     float getSourceSample(Grain& grain);
     
-    // Fast PRNG
-    uint32_t fastRand() {
-        noiseState_ ^= noiseState_ << 13;
-        noiseState_ ^= noiseState_ >> 17;
-        noiseState_ ^= noiseState_ << 5;
-        return noiseState_;
-    }
-
-    float fastRandFloat() {
-        return (float)(fastRand() & 0x7FFFFFFF) / (float)0x7FFFFFFF;
-    }
-
     // Parameters
     float density_;
     float durationMs_;

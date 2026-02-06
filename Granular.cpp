@@ -1,5 +1,6 @@
 #include "Granular.h"
 #include "Wavetables.h"
+#include "MathUtils.h"
 #include <math.h>
 #include <string.h>
 
@@ -148,7 +149,7 @@ float GranularExciter::getSourceSample(Grain& grain) {
             return Wavetables::readTriangle(grain.phase, 2);
             
         case GrainSource::DUST:
-            if (fastRandFloat(noiseState_) < dustProb_ * 10.0f) {
+            if (fastRandFloat01(noiseState_) < dustProb_ * 10.0f) {
                 return fastRandFloat(noiseState_);
             }
             return 0.0f;

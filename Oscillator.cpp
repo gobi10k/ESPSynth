@@ -1,4 +1,5 @@
 #include "Oscillator.h"
+#include "MathUtils.h"
 #include <math.h>
 
 // Pre-calculated supersaw multipliers (avoid powf per sample)
