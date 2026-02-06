@@ -10,8 +10,11 @@ bool SDManager::begin(uint8_t csPin) {
     // Initialize SPI for SD card
     SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, csPin_);
 
-    if (!SD.begin(csPin_)) {
-        Serial.println("[SD] Initialization failed!");
+    // Use a lower frequency for better compatibility (20MHz)
+    if (!SD.begin(csPin_, SPI, 20000000)) {
+        Serial.println("[SD] Initialization failed! Trying 10MHz...");
+        if (!SD.begin(csPin_, SPI, 10000000)) {
+            Serial.println("[SD] Initialization failed at 10MHz!");
         available_ = false;
         return false;
     }

@@ -257,7 +257,11 @@ void setup() {
     }
     
     // Setup SD card
-    sd.begin(SD_CS_PIN);
+    if (sd.begin(SD_CS_PIN)) {
+        Serial.println("[SD] Creating welcome file...");
+        const char* welcomeMsg = "=== ESP32 Synth v5 ===\nWelcome to your SD card!\nPresets are stored here.\n";
+        sd.writeFile("/welcome.txt", (const uint8_t*)welcomeMsg, strlen(welcomeMsg));
+    }
 
     // Setup controls
     controls.init(&synth);

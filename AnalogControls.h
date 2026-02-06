@@ -18,8 +18,8 @@ private:
     SynthEngine* engine_;
 
     static constexpr int NUM_POTS = 4;
-    static constexpr int DEADZONE = 20;  // Prevent jitter
-    static constexpr int HISTORY_SIZE = 8;
+    static constexpr int DEADZONE = 40;  // Increased to prevent jitter
+    static constexpr int HISTORY_SIZE = 32; // Increased for better smoothing
 
     int potHistory_[NUM_POTS][HISTORY_SIZE];
     int historyIndex_[NUM_POTS];
