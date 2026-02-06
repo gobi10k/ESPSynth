@@ -134,11 +134,10 @@ float Voice::process() {
 
     float sample = oscOutput;
 
-    // Apply filter with envelope modulation
-    float filterEnvVal = filterEnv_.process();
-
-    // Update filter coefficients every 8 samples for performance
+    // Update filter envelope and coefficients every 8 samples for performance
     if ((age_ & 0x07) == 0) {
+        float filterEnvVal = filterEnv_.process();
+
         // Apply velocity scaling to filter envelope amount
         float velocityMod = 1.0f - filterEnvVelocity_ + (velScalar_ * filterEnvVelocity_);
         float effectiveEnvAmount = filterEnvAmount_ * velocityMod;

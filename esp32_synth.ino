@@ -932,7 +932,17 @@ void processCommand(const String& cmd) {
 // ============================================================================
 
 void loop() {
-    // Process Hardware Controls
+    // 1. Process serial commands (Priority for responsiveness under load)
+    if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        processCommand(cmd);
+    }
+
+    // 2. Process MIDI
+    midi.process();
+
+    // 3. Process Hardware Controls
     controls.update();
     encNav.update();
     encVal.update();
@@ -968,16 +978,6 @@ void loop() {
         synth.noteOn(60, 100);
         delay(100);
         synth.noteOff(60);
-    }
-
-    // Process MIDI
-    midi.process();
-    
-    // Process serial commands
-    if (Serial.available()) {
-        String cmd = Serial.readStringUntil('\n');
-        cmd.trim();
-        processCommand(cmd);
     }
 
     // Heartbeat and auto-stats from loop() to avoid Serial deadlocks in audio task

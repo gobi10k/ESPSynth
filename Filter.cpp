@@ -58,26 +58,3 @@ void Filter::reset() {
     notch_ = 0.0f;
 }
 
-float Filter::process(float input) {
-    // State variable filter iteration (2x oversampled for stability)
-    for (int i = 0; i < 2; i++) {
-        low_ += fMod_ * band_;
-        high_ = input - low_ - q_ * band_;
-        band_ += fMod_ * high_;
-        notch_ = high_ + low_;
-    }
-    
-    // Select output based on mode
-    switch (mode_) {
-        case FilterMode::LOWPASS:
-            return low_;
-        case FilterMode::HIGHPASS:
-            return high_;
-        case FilterMode::BANDPASS:
-            return band_;
-        case FilterMode::NOTCH:
-            return notch_;
-        default:
-            return low_;
-    }
-}

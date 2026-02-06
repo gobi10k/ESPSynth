@@ -36,18 +36,6 @@ namespace Wavetables {
             }
         }
         
-        inline float lerp(float a, float b, float t) {
-            return a + t * (b - a);
-        }
-        
-        inline void phaseToIndex(uint32_t phase, uint16_t& idx0, uint16_t& idx1, float& frac) {
-            uint32_t tablePos = phase >> (PHASE_BITS - WAVETABLE_BITS);
-            uint32_t fracBits = (phase >> (PHASE_BITS - WAVETABLE_BITS - 16)) & 0xFFFF;
-            idx0 = tablePos & WAVETABLE_MASK;
-            idx1 = (tablePos + 1) & WAVETABLE_MASK;
-            frac = fracBits * (1.0f / 65536.0f);
-        }
-        
         void generateSawTable(float* table, int maxHarm) {
             for (int i = 0; i < WAVETABLE_SIZE; i++) table[i] = 0.0f;
             for (int h = 1; h <= maxHarm; h++) {
@@ -125,40 +113,6 @@ namespace Wavetables {
             if (freq < octaveFreqLimits[i]) return i;
         }
         return NUM_OCTAVE_TABLES - 1;
-    }
-
-    float readSine(uint32_t phase) {
-        uint16_t idx0, idx1;
-        float frac;
-        phaseToIndex(phase, idx0, idx1, frac);
-        return lerp(sinTable[idx0], sinTable[idx1], frac);
-    }
-
-    float readSaw(uint32_t phase, int tableIndex) {
-        if (tableIndex < 0) tableIndex = 0;
-        if (tableIndex >= NUM_OCTAVE_TABLES) tableIndex = NUM_OCTAVE_TABLES - 1;
-        uint16_t idx0, idx1;
-        float frac;
-        phaseToIndex(phase, idx0, idx1, frac);
-        return lerp(sawTables[tableIndex][idx0], sawTables[tableIndex][idx1], frac);
-    }
-
-    float readSquare(uint32_t phase, int tableIndex) {
-        if (tableIndex < 0) tableIndex = 0;
-        if (tableIndex >= NUM_OCTAVE_TABLES) tableIndex = NUM_OCTAVE_TABLES - 1;
-        uint16_t idx0, idx1;
-        float frac;
-        phaseToIndex(phase, idx0, idx1, frac);
-        return lerp(squareTables[tableIndex][idx0], squareTables[tableIndex][idx1], frac);
-    }
-
-    float readTriangle(uint32_t phase, int tableIndex) {
-        if (tableIndex < 0) tableIndex = 0;
-        if (tableIndex >= NUM_OCTAVE_TABLES) tableIndex = NUM_OCTAVE_TABLES - 1;
-        uint16_t idx0, idx1;
-        float frac;
-        phaseToIndex(phase, idx0, idx1, frac);
-        return lerp(triangleTables[tableIndex][idx0], triangleTables[tableIndex][idx1], frac);
     }
 
 }

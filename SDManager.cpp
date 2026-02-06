@@ -7,13 +7,20 @@ SDManager::SDManager() : available_(false), csPin_(SD_CS_PIN) {
 bool SDManager::begin(uint8_t csPin) {
     csPin_ = csPin;
 
+    // Explicitly configure CS pin
+    pinMode(csPin_, OUTPUT);
+    digitalWrite(csPin_, HIGH);
+
     // Initialize SPI for SD card
+    Serial.println("[SD] SPI Begin...");
     SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, csPin_);
+    delay(100); // Give it some time
 
     // Use a much lower frequency for better compatibility (8MHz)
     Serial.println("[SD] Attempting initialization at 8MHz...");
     if (!SD.begin(csPin_, SPI, 8000000)) {
         Serial.println("[SD] Initialization failed at 8MHz! Trying 4MHz...");
+        delay(100);
         if (!SD.begin(csPin_, SPI, 4000000)) {
             Serial.println("[SD] Initialization failed at 4MHz!");
             available_ = false;
