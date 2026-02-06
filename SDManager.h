@@ -24,6 +24,7 @@ public:
 private:
     bool available_;
     uint8_t csPin_;
+    SPIClass* spiBus_;
 };
 
 #endif

@@ -10,6 +10,9 @@ Compressor::Compressor() :
     releaseCoef_(0.0f),
     makeupGain_(1.0f),
     kneeWidth_(6.0f),
+    kneeHalf_(3.0f),
+    kneeInv_(0.0833f),
+    ratioMinusOne_(-0.75f),
     envelope_(0.0f),
     gainReductionDb_(0.0f),
     enabled_(false)
@@ -19,6 +22,7 @@ Compressor::Compressor() :
     setAttack(10.0f);
     setRelease(100.0f);
     setMakeupGain(0.0f);
+    setKnee(6.0f);
 }
 
 void Compressor::setThreshold(float dB) {
@@ -28,6 +32,7 @@ void Compressor::setThreshold(float dB) {
 
 void Compressor::setRatio(float ratio) {
     ratio_ = constrain(ratio, 1.0f, 20.0f);
+    ratioMinusOne_ = (1.0f / ratio_) - 1.0f;
 }
 
 void Compressor::setAttack(float ms) {
@@ -47,6 +52,8 @@ void Compressor::setMakeupGain(float dB) {
 
 void Compressor::setKnee(float dB) {
     kneeWidth_ = constrain(dB, 0.0f, 12.0f);
+    kneeHalf_ = kneeWidth_ * 0.5f;
+    kneeInv_ = (kneeWidth_ > 0.0f) ? (1.0f / (2.0f * kneeWidth_)) : 0.0f;
 }
 
 float Compressor::process(float input) {
@@ -57,22 +64,20 @@ float Compressor::process(float input) {
     float inputAbs = fabsf(input);
     
     // Convert to dB using fast log2
-    // 20 * log10(x) = 20 * log2(x) / log2(10) approx 6.0206 * log2(x)
     float inputDb = (inputAbs > 0.00001f) ? 6.0206f * fastLog2(inputAbs) : -100.0f;
     
     // Calculate gain reduction with soft knee
     float overDb = inputDb - thresholdDb_;
     float gainDb = 0.0f;
     
-    if (kneeWidth_ > 0.0f && overDb > -kneeWidth_ / 2.0f && overDb < kneeWidth_ / 2.0f) {
+    if (overDb > -kneeHalf_ && overDb < kneeHalf_) {
         // Soft knee region
-        float kneeInput = overDb + kneeWidth_ / 2.0f;
-        gainDb = (1.0f / ratio_ - 1.0f) * kneeInput * kneeInput / (2.0f * kneeWidth_);
-    } else if (overDb >= kneeWidth_ / 2.0f) {
+        float kneeInput = overDb + kneeHalf_;
+        gainDb = ratioMinusOne_ * kneeInput * kneeInput * kneeInv_;
+    } else if (overDb >= kneeHalf_) {
         // Above knee - full compression
-        gainDb = (1.0f / ratio_ - 1.0f) * overDb;
+        gainDb = ratioMinusOne_ * overDb;
     }
-    // Below knee: gainDb = 0 (no compression)
     
     // Smooth the gain reduction (envelope follower)
     float targetEnv = -gainDb;
@@ -85,7 +90,6 @@ float Compressor::process(float input) {
     gainReductionDb_ = envelope_;
     
     // Apply gain reduction
-    // 10^(x/20) = e^(x/20 * ln(10)) = e^(x * 0.115129)
     float gainLin = fastExp(-envelope_ * 0.115129f);
     
     return input * gainLin * makeupGain_;

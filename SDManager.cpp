@@ -1,38 +1,50 @@
 #include "SDManager.h"
 #include <Arduino.h>
 
-SDManager::SDManager() : available_(false), csPin_(SD_CS_PIN) {
+SDManager::SDManager() : available_(false), csPin_(SD_CS_PIN), spiBus_(nullptr) {
 }
 
 bool SDManager::begin(uint8_t csPin) {
     csPin_ = csPin;
 
-    // 1. Explicitly configure CS pin and disable it initially
+    // 1. Setup Pins
     pinMode(csPin_, OUTPUT);
-    digitalWrite(csPin_, HIGH);
-
-    // Ensure MISO is input with pullup to prevent floating when SD is not selected
+    digitalWrite(csPin_, HIGH); // Deselect
     pinMode(SD_MISO_PIN, INPUT_PULLUP);
 
-    // 2. Initialize SPI with explicit pins and longer settle time
-    Serial.println("[SD] Initializing SPI (VSPI)...");
-    SPI.end(); // Reset SPI if it was already running
-    SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, csPin_);
-    delay(500); // Settle delay
+    // 2. Initialize dedicated SPI bus (VSPI)
+    if (spiBus_) delete spiBus_;
+    spiBus_ = new SPIClass(VSPI);
+    spiBus_->begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, -1); // -1: Manual CS
 
-    // 3. Robust initialization sequence
-    // Start with 400kHz for highest compatibility during initial handshake
-    Serial.println("[SD] Attempting initialization at 400kHz (Handshake)...");
-    if (!SD.begin(csPin_, SPI, 400000, "/sd", 5)) {
-        Serial.println("[SD] Failed at 400kHz. Retrying with explicit SPI instance reset...");
-        SPI.end();
-        SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, csPin_);
-        delay(500);
-        if (!SD.begin(csPin_, SPI, 400000, "/sd", 5)) {
-            Serial.println("[SD] SD.begin failed after retry.");
-            available_ = false;
-            return false;
+    Serial.println("[SD] SPI (VSPI) instance created.");
+
+    // 3. Hardware Handshake (Reset SD state)
+    // Send 80 clock cycles with CS high to enter SPI mode
+    Serial.println("[SD] Handshake: Sending reset pulses...");
+    spiBus_->beginTransaction(SPISettings(400000, MSBFIRST, SPI_MODE0));
+    digitalWrite(csPin_, HIGH);
+    for (int i = 0; i < 10; i++) {
+        spiBus_->transfer(0xFF);
+    }
+    spiBus_->endTransaction();
+    delay(100);
+
+    // 4. Initialization Loop (Retries at 400kHz)
+    bool success = false;
+    for (int retry = 0; retry < 3; retry++) {
+        Serial.printf("[SD] Attempt %d (400kHz)...\n", retry + 1);
+        if (SD.begin(csPin_, *spiBus_, 400000, "/sd", 5)) {
+            success = true;
+            break;
         }
+        delay(500);
+    }
+
+    if (!success) {
+        Serial.println("[SD] Critical failure: SD.begin failed after retries.");
+        available_ = false;
+        return false;
     }
 
     uint8_t cardType = SD.cardType();

@@ -245,19 +245,7 @@ void setup() {
     
     Serial.println("\n=== ESP32 Synth v5 - Resonant Spectral Engine ===\n");
     
-    // Initialize subsystems
-    presets.begin();
-    
-    if (!display.init(&synth)) {
-        Serial.println("Display init failed");
-    }
-
-    if (!synth.init()) {
-        Serial.println("FATAL: Synth init failed");
-        while (1) delay(1000);
-    }
-    
-    // Setup SD card
+    // 1. Setup SD card FIRST to avoid bus contention
     if (sd.begin(SD_CS_PIN)) {
         Serial.println("[SD] Initializing filesystem...");
         const char* welcomeMsg = "=== ESP32 Synth v5 ===\nWelcome to your SD card!\nPresets are stored here.\n";
@@ -288,6 +276,18 @@ void setup() {
         }
     } else {
         Serial.println("[SD] Card NOT detected or initialization failed.");
+    }
+
+    // 2. Initialize other subsystems
+    presets.begin();
+
+    if (!display.init(&synth)) {
+        Serial.println("Display init failed");
+    }
+
+    if (!synth.init()) {
+        Serial.println("FATAL: Synth init failed");
+        while (1) delay(1000);
     }
 
     // Setup controls
