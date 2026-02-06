@@ -407,6 +407,8 @@ void printHelp() {
     Serial.println("  Dl         List SD files");
     Serial.println("  Ds<slot>   Save preset to SD");
     Serial.println("  DL<slot>   Load preset from SD");
+    Serial.println("  Di         Re-initialize SD card");
+    Serial.println("  Df         Format/Prepare SD folders");
     Serial.println("");
     Serial.println("-- Presets --");
     Serial.println("  P          List internal presets");
@@ -712,6 +714,17 @@ void processCommand(const String& cmd) {
                 if (presets.loadPresetFromSD(filename, p, sd)) {
                     applyPreset(p);
                     Serial.printf("Loaded from SD: %s\n", filename);
+                }
+            } else if (c1 == 'i') {
+                Serial.println("[SD] Re-initializing...");
+                sd.begin(SD_CS_PIN);
+            } else if (c1 == 'f') {
+                if (sd.isAvailable()) {
+                    Serial.println("[SD] Preparing filesystem...");
+                    SD.mkdir("/presets");
+                    Serial.println("[SD] /presets directory created.");
+                } else {
+                    Serial.println("[SD] Error: Card not available.");
                 }
             }
             break;

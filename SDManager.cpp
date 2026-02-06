@@ -20,14 +20,19 @@ bool SDManager::begin(uint8_t csPin) {
     Serial.println("[SD] SPI (VSPI) instance created.");
 
     // 3. Hardware Handshake (Reset SD state)
-    // Send 80 clock cycles with CS high to enter SPI mode
-    Serial.println("[SD] Handshake: Sending reset pulses...");
+    // Send 80+ clock cycles with CS high to enter SPI mode
+    Serial.println("[SD] Handshake: Sending 80+ clock pulses with CS HIGH...");
     spiBus_->beginTransaction(SPISettings(400000, MSBFIRST, SPI_MODE0));
     digitalWrite(csPin_, HIGH);
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 20; i++) { // 160 pulses to be safe
         spiBus_->transfer(0xFF);
     }
     spiBus_->endTransaction();
+
+    // Toggle CS just to "wake up" some controllers
+    digitalWrite(csPin_, LOW);
+    delay(10);
+    digitalWrite(csPin_, HIGH);
     delay(100);
 
     // 4. Initialization Loop (Retries at 400kHz)
