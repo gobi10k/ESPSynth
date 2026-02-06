@@ -467,33 +467,16 @@ void SynthEngine::processBlock() {
             lastArpGate_ = arp_.isGateOn();
         }
         
-        // Mix all voices with panning - unrolled
+        // Mix all voices with panning
         float left = 0.0f;
         float right = 0.0f;
 
-        // Voice 0
-        if (voices_[0].isActive()) {
-            float s = voices_[0].process();
-            left += s * voicePanL_[0];
-            right += s * voicePanR_[0];
-        }
-        // Voice 1
-        if (voices_[1].isActive()) {
-            float s = voices_[1].process();
-            left += s * voicePanL_[1];
-            right += s * voicePanR_[1];
-        }
-        // Voice 2
-        if (voices_[2].isActive()) {
-            float s = voices_[2].process();
-            left += s * voicePanL_[2];
-            right += s * voicePanR_[2];
-        }
-        // Voice 3
-        if (voices_[3].isActive()) {
-            float s = voices_[3].process();
-            left += s * voicePanL_[3];
-            right += s * voicePanR_[3];
+        for (int v = 0; v < NUM_VOICES; v++) {
+            if (voices_[v].isActive()) {
+                float s = voices_[v].process();
+                left += s * voicePanL_[v];
+                right += s * voicePanR_[v];
+            }
         }
         
         // Scale down for mixing

@@ -43,6 +43,7 @@ struct Grain {
     float amplitude;
     float position;     // 0-1 within grain duration
     float duration;     // In samples
+    float invDuration;
     GrainSource source;
     GrainWindow window;
 };

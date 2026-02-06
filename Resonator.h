@@ -62,7 +62,15 @@ public:
 private:
     void updateCoefficients();
     void applyDirtyCoefficients();
-    float processResonator(int index, float input);
+
+    inline float processResonator(int index, float input) {
+        // Direct Form II Transposed biquad optimized for Bandpass (b1=0, b2=-b0)
+        float b0 = b0_[index];
+        float output = b0 * input + x1_[index];
+        x1_[index] = -a1_[index] * output + x2_[index];
+        x2_[index] = -b0 * input - a2_[index] * output;
+        return output;
+    }
     
     float fundamental_;
     ResonatorProfile profile_;

@@ -155,29 +155,18 @@ void ResonatorBank::applyDirtyCoefficients() {
     dirty_ = false;
 }
 
-float ResonatorBank::processResonator(int index, float input) {
-    // Direct Form II Transposed biquad
-    float output = b0_[index] * input + x1_[index];
-    x1_[index] = b1_[index] * input - a1_[index] * output + x2_[index];
-    x2_[index] = b2_[index] * input - a2_[index] * output;
-    return output;
-}
 
 float ResonatorBank::process(float input) {
     if (isnan(input) || isinf(input)) return 0.0f;
 
     applyDirtyCoefficients();
 
-    // Sum all resonators - unrolled for performance
+    // Sum all resonators
     float resonated = 0.0f;
     
-    // Partials 0-5
-    resonated += processResonator(0, input) * gains_[0];
-    resonated += processResonator(1, input) * gains_[1];
-    resonated += processResonator(2, input) * gains_[2];
-    resonated += processResonator(3, input) * gains_[3];
-    resonated += processResonator(4, input) * gains_[4];
-    resonated += processResonator(5, input) * gains_[5];
+    for (int i = 0; i < MAX_RESONATORS; i++) {
+        resonated += processResonator(i, input) * gains_[i];
+    }
     
     // Normalize and filter
     resonated *= 0.4f;

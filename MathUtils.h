@@ -60,11 +60,13 @@ inline uint32_t fastRand(uint32_t& state) {
 }
 
 inline float fastRandFloat(uint32_t& state) {
-    return (float)(int32_t)fastRand(state) / (float)INT32_MAX;
+    // Range: -1.0 to 1.0 (approx)
+    return (float)((int32_t)fastRand(state)) * 4.6566129e-10f;
 }
 
 inline float fastRandFloat01(uint32_t& state) {
-    return (float)(fastRand(state) & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+    // Range: 0.0 to 1.0
+    return (float)(fastRand(state) & 0x7FFFFFFF) * 4.6566129e-10f;
 }
 
 #endif

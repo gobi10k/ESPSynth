@@ -88,14 +88,6 @@ float Voice::process() {
     
     age_++;
     
-    // Smooth frequency only if needed
-    float freq = targetFreq_;
-    if (pitchSmooth_.getSmoothTime() > 0.0f) {
-        freq = pitchSmooth_.process();
-        osc_[0].setFrequency(freq);
-        osc_[1].setFrequency(freq);
-    }
-    
     float oscOutput = 0.0f;
     
     switch (synthMode_) {
@@ -157,17 +149,9 @@ float Voice::process() {
     }
 
     // Apply amplitude envelope
-    float ampEnvVal = ampEnv_.process();
-    if (isnan(ampEnvVal) || isinf(ampEnvVal)) {
-        ampEnvVal = 0.0f;
-    }
-    
-    sample *= ampEnvVal * velScalar_;
+    sample *= ampEnv_.process() * velScalar_;
 
-    // Safety check
-    if (isnan(sample) || isinf(sample)) {
-        sample = 0.0f;
-    }
+    // Safety check - removed redundant isnan/isinf for performance
     if (sample > 1.0f) sample = 1.0f;
     if (sample < -1.0f) sample = -1.0f;
 
@@ -258,12 +242,15 @@ void Voice::setGlideTime(float ms) {
 void Voice::updateBlockParams() {
     if (state_ == VoiceState::FREE) return;
 
-    // Apply global modulations once per block
-    osc_[0].setPitchMod(globalPitchMod_);
-    osc_[1].setPitchMod(globalPitchMod_);
+    // Smooth frequency once per block
+    float freq = targetFreq_;
+    if (pitchSmooth_.getSmoothTime() > 0.0f) {
+        freq = pitchSmooth_.process();
+    }
 
-    // Ensure oscillators are at right base frequency
-    float freq = (pitchSmooth_.getSmoothTime() > 0.0f) ? pitchSmooth_.getCurrent() : targetFreq_;
+    // Apply frequency and global modulations once per block
     osc_[0].setFrequency(freq);
     osc_[1].setFrequency(freq);
+    osc_[0].setPitchMod(globalPitchMod_);
+    osc_[1].setPitchMod(globalPitchMod_);
 }

@@ -15,7 +15,8 @@ Filter::Filter() :
     low_(0.0f),
     high_(0.0f),
     band_(0.0f),
-    notch_(0.0f)
+    notch_(0.0f),
+    activeOutput_(&low_)
 {
     updateCoefficients(0.0f);
 }
@@ -33,6 +34,13 @@ void Filter::setResonance(float r) {
 
 void Filter::setMode(FilterMode mode) {
     mode_ = mode;
+    switch (mode_) {
+        case FilterMode::LOWPASS:  activeOutput_ = &low_; break;
+        case FilterMode::HIGHPASS: activeOutput_ = &high_; break;
+        case FilterMode::BANDPASS: activeOutput_ = &band_; break;
+        case FilterMode::NOTCH:    activeOutput_ = &notch_; break;
+        default: activeOutput_ = &low_; break;
+    }
 }
 
 void Filter::setKeyTracking(float amount) {

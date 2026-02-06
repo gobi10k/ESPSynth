@@ -49,13 +49,7 @@ public:
 
         notch_ = high_ + low_;
 
-        switch (mode_) {
-            case FilterMode::LOWPASS:  return low_;
-            case FilterMode::HIGHPASS: return high_;
-            case FilterMode::BANDPASS: return band_;
-            case FilterMode::NOTCH:    return notch_;
-            default: return low_;
-        }
+        return *activeOutput_;
     }
     
     // Access individual outputs
@@ -84,6 +78,7 @@ private:
     float high_;
     float band_;
     float notch_;
+    float* activeOutput_;
 };
 
 #endif

@@ -92,6 +92,7 @@ void GranularExciter::trigger(float pitch, float amp) {
             float durationVariation = 1.0f + fastRandFloat(noiseState_) * durationSpread_;
             g.duration = (durationMs_ * 0.001f) * SAMPLE_RATE * durationVariation;
             g.duration = max(10.0f, g.duration);
+            g.invDuration = 1.0f / g.duration;
             
             // Pitch with randomization
             float pitchVariation = fastRandFloat(noiseState_) * pitchSpread_;
@@ -164,7 +165,7 @@ float GranularExciter::processGrain(Grain& grain) {
     float sample = getSourceSample(grain);
     
     // Apply window
-    float windowedPos = grain.position / grain.duration;
+    float windowedPos = grain.position * grain.invDuration;
     float window = getWindow(windowedPos, grain.window);
     
     sample *= window * grain.amplitude;
