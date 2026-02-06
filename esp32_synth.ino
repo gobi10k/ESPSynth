@@ -249,16 +249,16 @@ void setup() {
     if (sd.begin(SD_CS_PIN)) {
         Serial.println("[SD] Initializing filesystem...");
         const char* welcomeMsg = "=== ESP32 Synth v5 ===\nWelcome to your SD card!\nPresets are stored here.\n";
-        sd.writeFile("/welcome.txt", (const uint8_t*)welcomeMsg, strlen(welcomeMsg));
+        sd.writeFile("/sd/welcome.txt", (const uint8_t*)welcomeMsg, strlen(welcomeMsg));
 
         // Create presets directory if not exists
-        if (!sd.exists("/presets")) {
-            Serial.println("[SD] Creating /presets directory...");
-            SD.mkdir("/presets");
+        if (!sd.exists("/sd/presets")) {
+            Serial.println("[SD] Creating /sd/presets directory...");
+            sd.mkdir("/sd/presets");
         }
 
         // Populate with a few test presets if empty
-        File pDir = SD.open("/presets");
+        File pDir = SD.open("/sd/presets");
         if (pDir && pDir.isDirectory()) {
             File first = pDir.openNextFile();
             if (!first) {
@@ -721,8 +721,8 @@ void processCommand(const String& cmd) {
             } else if (c1 == 'f') {
                 if (sd.isAvailable()) {
                     Serial.println("[SD] Preparing filesystem...");
-                    SD.mkdir("/presets");
-                    Serial.println("[SD] /presets directory created.");
+                    sd.mkdir("/sd/presets");
+                    Serial.println("[SD] /sd/presets directory created.");
                 } else {
                     Serial.println("[SD] Error: Card not available.");
                 }

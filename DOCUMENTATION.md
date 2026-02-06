@@ -51,7 +51,7 @@ The post-mix signal passes through a comprehensive effect suite:
 - **Control Interface:**
   - **Encoder 1 (Nav):** Page switching and item selection (A:36, B:39, SW:15).
   - **Encoder 2 (Value):** Parameter adjustment (A:14, B:12, SW:13).
-- **Storage:** Micro SD Card (SPI: 5, 18, 19, 23) for preset management.
+- **Storage:** Micro SD Card (SPI: 4, 18, 19, 23) for preset management.
 
 ## 6. MIDI & Preset System
 - **Presets:** 16 internal slots + unlimited SD card storage.
@@ -88,7 +88,7 @@ The SD card system is critical for long-term preset storage. If initialization f
 - **Formatting:** Must be **FAT32** or **FAT16**. ExFAT is not supported by the standard Arduino SD library.
 - **Partitioning:** Use a **Master Boot Record (MBR)** partition scheme. GPT partitions may not be recognized.
 - **Wiring (VSPI):**
-  - **CS:** GPIO 5
+  - **CS:** GPIO 4 (Changed from 5 to avoid conflict)
   - **SCK:** GPIO 18
   - **MISO:** GPIO 19
   - **MOSI:** GPIO 23
@@ -107,3 +107,9 @@ The SD card system is critical for long-term preset storage. If initialization f
 2. **Handshake Failures:** If initialization fails at 400kHz, it usually indicates signal integrity issues. Keep SPI wires as short as possible (< 10cm).
 3. **Dedicated Bus:** This project uses a dedicated VSPI instance to prevent conflicts with the I2S audio task. Ensure no other peripherals are sharing these pins.
 4. **Manual Creation:** If the synth cannot create the directory, you can manually create a folder named `presets` on your PC and try again.
+
+### Preloading Presets (Optional)
+While the synth auto-populates the card, you can manually add presets. A preset file is a binary blob exactly **128 bytes** in size (current `sizeof(PresetData)`).
+- Create a folder named `presets` at the root.
+- Name files like `pad.sy`, `bass.sy`, etc. (max 8.3 filename format is safest).
+- The synth will scan this directory when you use the `Dl` (List) command.

@@ -176,7 +176,7 @@ bool PresetManager::savePresetToSD(const char* filename, const PresetData& prese
     if (!sd.isAvailable()) return false;
 
     char path[64];
-    snprintf(path, sizeof(path), "/presets/%s", filename);
+    snprintf(path, sizeof(path), "/sd/presets/%s", filename);
     if (!strcasestr(path, ".sy")) {
         strncat(path, ".sy", sizeof(path) - strlen(path) - 1);
     }
@@ -191,7 +191,7 @@ bool PresetManager::loadPresetFromSD(const char* filename, PresetData& preset, S
     if (!sd.isAvailable()) return false;
 
     char path[64];
-    snprintf(path, sizeof(path), "/presets/%s", filename);
+    snprintf(path, sizeof(path), "/sd/presets/%s", filename);
     if (!strcasestr(path, ".sy")) {
         strncat(path, ".sy", sizeof(path) - strlen(path) - 1);
     }

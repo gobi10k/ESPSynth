@@ -111,6 +111,11 @@ bool SDManager::exists(const char* path) {
     return SD.exists(path);
 }
 
+bool SDManager::mkdir(const char* path) {
+    if (!available_) return false;
+    return SD.mkdir(path);
+}
+
 bool SDManager::writeFile(const char* path, const uint8_t* data, size_t len) {
     if (!available_) return false;
 
