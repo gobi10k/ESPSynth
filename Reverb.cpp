@@ -170,6 +170,11 @@ void FDNReverb::processStereo(float input, float& left, float& right) {
     // Stereo Output: split the 4 channels into 2 pairs
     float wetL = (outputs[0] + outputs[1]) * 0.5f;
     float wetR = (outputs[2] + outputs[3]) * 0.5f;
+
+    if (isnan(wetL) || isinf(wetL) || isnan(wetR) || isinf(wetR)) {
+        reset();
+        wetL = wetR = 0.0f;
+    }
     
     left = input * (1.0f - mix_) + wetL * mix_;
     right = input * (1.0f - mix_) + wetR * mix_;

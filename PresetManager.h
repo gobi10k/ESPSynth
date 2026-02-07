@@ -85,7 +85,10 @@ struct PresetData {
     uint8_t filterEnvVel;
     uint8_t filterKeyTrack;
     int8_t globalPan;
-    uint8_t reserved[10];
+    uint8_t unisonVoices;
+    uint8_t unisonDetune;
+    uint8_t waveMorph;
+    uint8_t reserved[7];
     
     uint32_t checksum;
 };

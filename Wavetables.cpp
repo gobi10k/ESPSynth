@@ -1,7 +1,7 @@
 #include "Wavetables.h"
 #include <math.h>
 
-const char* WAVEFORM_NAMES[] = {"SIN", "SAW", "SQR", "TRI", "PLS", "SUP", "NOI"};
+const char* WAVEFORM_NAMES[] = {"SIN", "SAW", "SQR", "TRI", "PLS", "SUP", "NOI", "RMP", "MRPH", "SDT"};
 
 namespace Wavetables {
 

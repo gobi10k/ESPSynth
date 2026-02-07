@@ -12,7 +12,9 @@ DisplayManager::DisplayManager() :
     refreshDelayMs_(50),
     running_(false),
     currentPage_(DisplayPage::MAIN),
-    selectedItem_(0)
+    selectedItem_(0),
+    sdFileIndex_(0),
+    sdWaveMode_(false)
 {
 }
 
@@ -91,6 +93,9 @@ void DisplayManager::nextItem() {
     int maxItems = 4;
     if (currentPage_ == DisplayPage::MAIN) maxItems = 0;
     else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
+    else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
+    else if (currentPage_ == DisplayPage::ENVELOPES) maxItems = 8;
+    else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 2;
 
     if (selectedItem_ >= maxItems) selectedItem_ = 0;
 }
@@ -100,6 +105,9 @@ void DisplayManager::prevItem() {
     int maxItems = 4;
     if (currentPage_ == DisplayPage::MAIN) maxItems = 0;
     else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
+    else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
+    else if (currentPage_ == DisplayPage::ENVELOPES) maxItems = 8;
+    else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 2;
 
     if (selectedItem_ < 0) selectedItem_ = maxItems - 1;
     if (selectedItem_ < 0) selectedItem_ = 0;
@@ -113,18 +121,40 @@ void DisplayManager::adjustValue(int delta) {
             switch (selectedItem_) {
                 case 0: {
                     int wf = (int)engine_->getOscWaveform(0) + delta;
-                    while (wf < 0) wf += 7;
-                    engine_->setOscWaveform(0, (Waveform)(wf % 7));
+                    while (wf < 0) wf += (int)Waveform::NUM_WAVEFORMS;
+                    engine_->setOscWaveform(0, (Waveform)(wf % (int)Waveform::NUM_WAVEFORMS));
                     break;
                 }
                 case 1: {
                     int wf = (int)engine_->getOscWaveform(1) + delta;
-                    while (wf < 0) wf += 7;
-                    engine_->setOscWaveform(1, (Waveform)(wf % 7));
+                    while (wf < 0) wf += (int)Waveform::NUM_WAVEFORMS;
+                    engine_->setOscWaveform(1, (Waveform)(wf % (int)Waveform::NUM_WAVEFORMS));
                     break;
                 }
                 case 2: engine_->setOscMix(constrain(engine_->getOscMix() + delta * 0.05f, 0.0f, 1.0f)); break;
                 case 3: engine_->setOscDetune(1, constrain(engine_->getOscDetune(1) + delta * 0.5f, -50.0f, 50.0f)); break;
+                case 4: engine_->setUnisonVoices(constrain(engine_->getUnisonVoices() + delta, 1, NUM_VOICES)); break;
+                case 5: {
+                    for(int i=0; i<NUM_VOICES; i++) {
+                        float m = constrain(engine_->getVoice(i).getOsc(0).getMorph() + delta * 0.05f, 0.0f, 1.0f);
+                        engine_->getVoice(i).getOsc(0).setMorph(m);
+                        engine_->getVoice(i).getOsc(1).setMorph(m);
+                    }
+                    break;
+                }
+            }
+            break;
+
+        case DisplayPage::ENVELOPES:
+            switch (selectedItem_) {
+                case 0: engine_->setAmpADSR(constrain(engine_->getAmpA() + delta * 0.01f, 0.0f, 5.0f), -1, -1, -1); break;
+                case 1: engine_->setAmpADSR(-1, constrain(engine_->getAmpD() + delta * 0.01f, 0.0f, 5.0f), -1, -1); break;
+                case 2: engine_->setAmpADSR(-1, -1, constrain(engine_->getAmpS() + delta * 0.05f, 0.0f, 1.0f), -1); break;
+                case 3: engine_->setAmpADSR(-1, -1, -1, constrain(engine_->getAmpR() + delta * 0.01f, 0.0f, 5.0f)); break;
+                case 4: engine_->setFilterADSR(constrain(engine_->getFltA() + delta * 0.01f, 0.0f, 5.0f), -1, -1, -1); break;
+                case 5: engine_->setFilterADSR(-1, constrain(engine_->getFltD() + delta * 0.01f, 0.0f, 5.0f), -1, -1); break;
+                case 6: engine_->setFilterADSR(-1, -1, constrain(engine_->getFltS() + delta * 0.05f, 0.0f, 1.0f), -1); break;
+                case 7: engine_->setFilterADSR(-1, -1, -1, constrain(engine_->getFltR() + delta * 0.01f, 0.0f, 5.0f)); break;
             }
             break;
 
@@ -161,6 +191,17 @@ void DisplayManager::adjustValue(int delta) {
             }
             break;
 
+        case DisplayPage::SD_BROWSER:
+            if (selectedItem_ == 0) {
+                sdWaveMode_ = !sdWaveMode_;
+                sdFileIndex_ = 0;
+            } else if (selectedItem_ == 1) {
+                sdFileIndex_ += delta;
+                if (sdFileIndex_ < 0) sdFileIndex_ = 0;
+                // Clamp to max files in directory (to be implemented properly)
+            }
+            break;
+
         default: break;
     }
 }
@@ -172,6 +213,7 @@ void DisplayManager::drawUI() {
         case DisplayPage::MAIN: drawMainPage(); break;
         case DisplayPage::OSCILLATORS: drawOscPage(); break;
         case DisplayPage::FILTER: drawFilterPage(); break;
+        case DisplayPage::ENVELOPES: drawEnvPage(); break;
         case DisplayPage::EFFECTS: drawEffectsPage(); break;
         case DisplayPage::SD_BROWSER: drawSDPage(); break;
         default: drawMainPage();
@@ -229,17 +271,49 @@ void DisplayManager::drawOscPage() {
     Waveform wf1 = engine_->getOscWaveform(0);
     Waveform wf2 = engine_->getOscWaveform(1);
 
-    display_.drawStr(0, 22, selectedItem_ == 0 ? "> OSC1:" : "  OSC1:");
-    display_.drawStr(45, 22, WAVEFORM_NAMES[(int)wf1]);
+    display_.drawStr(0, 22, selectedItem_ == 0 ? "> W1:" : "  W1:");
+    display_.drawStr(35, 22, WAVEFORM_NAMES[(int)wf1]);
 
-    display_.drawStr(0, 34, selectedItem_ == 1 ? "> OSC2:" : "  OSC2:");
-    display_.drawStr(45, 34, WAVEFORM_NAMES[(int)wf2]);
+    display_.drawStr(64, 22, selectedItem_ == 1 ? "> W2:" : "  W2:");
+    display_.drawStr(99, 22, WAVEFORM_NAMES[(int)wf2]);
 
     snprintf(buf, sizeof(buf), "%s MIX: %.0f%%", selectedItem_ == 2 ? ">" : " ", engine_->getOscMix() * 100.0f);
+    display_.drawStr(0, 34, buf);
+
+    snprintf(buf, sizeof(buf), "%s DET: %.1f", selectedItem_ == 3 ? ">" : " ", engine_->getOscDetune(1));
+    display_.drawStr(64, 34, buf);
+
+    snprintf(buf, sizeof(buf), "%s UNISON: %d", selectedItem_ == 4 ? ">" : " ", engine_->getUnisonVoices());
     display_.drawStr(0, 46, buf);
 
-    snprintf(buf, sizeof(buf), "%s DETUNE: %.1f", selectedItem_ == 3 ? ">" : " ", engine_->getOscDetune(1));
+    snprintf(buf, sizeof(buf), "%s MORPH: %.0f%%", selectedItem_ == 5 ? ">" : " ", engine_->getVoice(0).getOsc(0).getMorph() * 100.0f);
     display_.drawStr(0, 58, buf);
+}
+
+void DisplayManager::drawEnvPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "ENVELOPES");
+    display_.drawLine(0, 9, 127, 9);
+
+    display_.drawStr(0, 20, "AMP ADSR:");
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 0 ? ">" : "A:", engine_->getAmpA());
+    display_.drawStr(0, 32, buf);
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 1 ? ">" : "D:", engine_->getAmpD());
+    display_.drawStr(32, 32, buf);
+    snprintf(buf, sizeof(buf), "%s%.0f", selectedItem_ == 2 ? ">" : "S:", engine_->getAmpS() * 100.0f);
+    display_.drawStr(64, 32, buf);
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 3 ? ">" : "R:", engine_->getAmpR());
+    display_.drawStr(96, 32, buf);
+
+    display_.drawStr(0, 46, "FLT ADSR:");
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 4 ? ">" : "A:", engine_->getFltA());
+    display_.drawStr(0, 58, buf);
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 5 ? ">" : "D:", engine_->getFltD());
+    display_.drawStr(32, 58, buf);
+    snprintf(buf, sizeof(buf), "%s%.0f", selectedItem_ == 6 ? ">" : "S:", engine_->getFltS() * 100.0f);
+    display_.drawStr(64, 58, buf);
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 7 ? ">" : "R:", engine_->getFltR());
+    display_.drawStr(96, 58, buf);
 }
 
 void DisplayManager::drawFilterPage() {
@@ -288,17 +362,26 @@ void DisplayManager::drawEffectsPage() {
 }
 
 void DisplayManager::drawSDPage() {
-    display_.drawStr(0, 7, "SD CARD STATUS");
+    display_.drawStr(0, 7, "SD BROWSER");
     display_.drawLine(0, 9, 127, 9);
 
-    display_.drawStr(0, 22, "FILE SYSTEM: FAT32");
-    display_.drawStr(0, 34, "STATUS: READY");
+    display_.drawStr(0, 22, selectedItem_ == 0 ? "> MODE:" : "  MODE:");
+    display_.drawStr(50, 22, sdWaveMode_ ? "WAVES" : "PRESETS");
 
-    char buf[32];
-    snprintf(buf, sizeof(buf), "PRESETS: %d FILES", 12); // Dummy count
-    display_.drawStr(0, 46, buf);
+    display_.drawStr(0, 34, "FILE:");
 
-    display_.drawStr(0, 58, "ENCODER 2: BROWSE");
+    // Browse logic: Encoder 2 delta will change sdFileIndex_
+    // In a real implementation we would scan the directory.
+    // For now we'll show what's in the WavetableManager if in wave mode.
+    if (sdWaveMode_) {
+        const char* name = engine_->getWavetableManager().getWaveFileName(sdFileIndex_);
+        if (name) display_.drawStr(35, 34, name);
+        else display_.drawStr(35, 34, "<EMPTY>");
+    } else {
+        display_.drawStr(35, 34, "preset_0.sy");
+    }
+
+    display_.drawStr(0, 58, "ENC2: SCROLL, CLICK: LOAD");
 }
 
 void DisplayManager::displayTaskWrapper(void* param) {

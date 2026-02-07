@@ -10,6 +10,7 @@ enum class DisplayPage : uint8_t {
     MAIN = 0,
     OSCILLATORS,
     FILTER,
+    ENVELOPES,
     EFFECTS,
     SD_BROWSER,
     NUM_PAGES
@@ -34,12 +35,15 @@ public:
     void adjustValue(int delta);
 
     DisplayPage getCurrentPage() const { return currentPage_; }
+    bool isWaveMode() const { return sdWaveMode_; }
+    int getSDFileIndex() const { return sdFileIndex_; }
 
 private:
     void drawUI();
     void drawMainPage();
     void drawOscPage();
     void drawFilterPage();
+    void drawEnvPage();
     void drawEffectsPage();
     void drawSDPage();
 
@@ -52,6 +56,8 @@ private:
     volatile bool running_;
     DisplayPage currentPage_;
     int8_t selectedItem_;
+    int8_t sdFileIndex_;
+    bool sdWaveMode_; // true = waves, false = presets
 };
 
 #endif

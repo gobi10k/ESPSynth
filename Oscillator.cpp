@@ -29,7 +29,10 @@ Oscillator::Oscillator() :
     pitchMod_(0.0f),
     pitchMult_(1.0f),
     noiseState_(22222),
-    lastPulse_(0.0f)
+    lastPulse_(0.0f),
+    morph_(0.0f),
+    customTable_(nullptr),
+    customTableSize_(1024)
 {
     for (int i = 0; i < 7; i++) {
         supersawPhases_[i] = (uint32_t)(rand());  // Random start phases

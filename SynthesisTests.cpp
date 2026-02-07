@@ -22,6 +22,7 @@ void SynthesisTests::runAll() {
     testSync();
     testRingMod();
     testModMatrix();
+    testMorph();
 
     Serial.println("\n--- RUNNING STRESS TESTS (100k samples) ---");
     testSaturationStress();
@@ -93,6 +94,21 @@ void SynthesisTests::testCombStress() {
         }
     }
     delete cb;
+    Serial.println(passed ? "PASSED" : "FAILED");
+}
+
+void SynthesisTests::testMorph() {
+    Serial.print("Testing Wavetable Morph... ");
+    uint32_t phase = 0;
+    bool passed = true;
+    for (float m = 0.0f; m <= 1.0f; m += 0.1f) {
+        float sample = Wavetables::readMorph(phase, m, 2);
+        if (isnan(sample) || isinf(sample) || sample < -1.1f || sample > 1.1f) {
+            passed = false;
+            break;
+        }
+        phase += 1000000;
+    }
     Serial.println(passed ? "PASSED" : "FAILED");
 }
 

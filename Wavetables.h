@@ -15,6 +15,9 @@ enum class Waveform : uint8_t {
     PULSE,       // Variable pulse width
     SUPERSAW,    // Multiple detuned saws
     NOISE,       // White noise
+    RAMP_DOWN,   // Inverted saw
+    MORPH,       // Morph between sine, saw, square, triangle
+    SD_TABLE,    // SD-loaded custom wavetable
     NUM_WAVEFORMS
 };
 
@@ -80,6 +83,42 @@ namespace Wavetables {
         float frac;
         phaseToIndex(phase, idx0, idx1, frac);
         return lerp(triangleTables[tableIndex][idx0], triangleTables[tableIndex][idx1], frac);
+    }
+
+    inline float readRampDown(uint32_t phase, int tableIndex) {
+        return -readSaw(phase, tableIndex);
+    }
+
+    /**
+     * Morph between Sine, Saw, Square, Triangle
+     * morph: 0.0=Sine, 0.33=Saw, 0.66=Square, 1.0=Triangle
+     */
+    inline float readMorph(uint32_t phase, float morph, int tableIndex) {
+        morph = constrain(morph, 0.0f, 1.0f);
+        if (morph < 0.333f) {
+            float t = morph * 3.0f;
+            return lerp(readSine(phase), readSaw(phase, tableIndex), t);
+        } else if (morph < 0.666f) {
+            float t = (morph - 0.333f) * 3.0f;
+            return lerp(readSaw(phase, tableIndex), readSquare(phase, tableIndex), t);
+        } else {
+            float t = (morph - 0.666f) * 3.0f;
+            return lerp(readSquare(phase, tableIndex), readTriangle(phase, tableIndex), t);
+        }
+    }
+
+    inline float readCustom(uint32_t phase, float* table, uint16_t size) {
+        if (!table) return 0.0f;
+        uint16_t mask = size - 1;
+        uint8_t bits = (uint8_t)log2(size);
+
+        uint32_t tablePos = phase >> (PHASE_BITS - bits);
+        uint32_t fracBits = (phase >> (PHASE_BITS - bits - 16)) & 0xFFFF;
+        uint16_t idx0 = tablePos & mask;
+        uint16_t idx1 = (tablePos + 1) & mask;
+        float frac = fracBits * (1.0f / 65536.0f);
+
+        return lerp(table[idx0], table[idx1], frac);
     }
 
 }

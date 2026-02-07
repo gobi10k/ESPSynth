@@ -13,6 +13,7 @@ private:
     static void testFM();
     static void testSync();
     static void testRingMod();
+    static void testMorph();
     static void testModMatrix();
     static void testReverbStress();
     static void testResonatorStress();

@@ -135,6 +135,12 @@ float CombFilter::process(float input) {
     // Soft clip and write
     if (toWrite > 1.0f) toWrite = 1.0f;
     if (toWrite < -1.0f) toWrite = -1.0f;
+    if (isnan(toWrite) || isinf(toWrite)) {
+        reset();
+        toWrite = 0.0f;
+        output = 0.0f;
+    }
+
     buffer_[writePos_] = (int16_t)(toWrite * 32000.0f);
     writePos_ = (writePos_ + 1) % COMB_BUFFER_SIZE;
     
