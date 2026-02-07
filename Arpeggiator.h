@@ -31,6 +31,8 @@ public:
     ArpMode getMode() const { return mode_; }
     float getTempo() const { return tempo_; }
     uint8_t getDivision() const { return division_; }
+    float getGateLength() const { return gateLength_; }
+    uint8_t getOctaveRange() const { return octaveRange_; }
     
     // Note input
     void noteOn(uint8_t note, uint8_t velocity);

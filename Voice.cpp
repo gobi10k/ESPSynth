@@ -239,6 +239,35 @@ void Voice::setGlideTime(float ms) {
     pitchSmooth_.setSmoothTime(ms);
 }
 
+void Voice::applyParams(const GlobalVoiceParams& p) {
+    setOscWaveform(0, p.oscWaveforms[0]);
+    setOscWaveform(1, p.oscWaveforms[1]);
+    setOscDetune(0, p.oscDetune[0]);
+    setOscDetune(1, p.oscDetune[1]);
+    osc_[0].setCoarse(p.oscCoarse[0]);
+    osc_[1].setCoarse(p.oscCoarse[1]);
+    setOscMix(p.oscMix);
+    osc_[0].setPulseWidth(p.pulseWidth[0]);
+    osc_[1].setPulseWidth(p.pulseWidth[1]);
+    osc_[0].setMorph(p.morph[0]);
+    osc_[1].setMorph(p.morph[1]);
+
+    setSynthMode(p.synthMode);
+    setFMAmount(p.fmAmount);
+
+    setFilterType(p.filterType);
+    setFilterCutoff(p.filterCutoff);
+    setFilterResonance(p.filterReso);
+    setFilterMode(p.filterMode);
+    setFilterEnvAmount(p.filterEnvAmount);
+    setFilterEnvVelocity(p.filterEnvVelocity);
+    setFilterKeyTracking(p.filterKeyTracking);
+
+    setAmpADSR(p.ampA, p.ampD, p.ampS, p.ampR);
+    setFilterADSR(p.fltA, p.fltD, p.fltS, p.fltR);
+    setGlideTime(p.glideTime);
+}
+
 void Voice::updateBlockParams() {
     if (state_ == VoiceState::FREE) return;
 
@@ -253,4 +282,6 @@ void Voice::updateBlockParams() {
     osc_[1].setFrequency(freq);
     osc_[0].setPitchMod(globalPitchMod_);
     osc_[1].setPitchMod(globalPitchMod_);
+    osc_[0].setPWMod(globalOsc1PWMod_);
+    osc_[1].setPWMod(globalOsc2PWMod_);
 }

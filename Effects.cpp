@@ -35,33 +35,39 @@ void Delay::setMix(float mix) {
 }
 
 void Delay::clear() {
-    memset(buffer_, 0, sizeof(buffer_));
+    memset(bufferL_, 0, sizeof(bufferL_));
+    memset(bufferR_, 0, sizeof(bufferR_));
     writePos_ = 0;
 }
 
 float Delay::process(float input) {
-    if (isnan(input) || isinf(input)) return 0.0f;
+    float left = input;
+    float right = input;
+    processStereo(left, right);
+    return (left + right) * 0.5f;
+}
 
-    // Read from delay line using safe index math
+void Delay::processStereo(float& left, float& right) {
+    if (isnan(left) || isinf(left)) left = 0.0f;
+    if (isnan(right) || isinf(right)) right = 0.0f;
+
     int readPos = (int)writePos_ - (int)delaySamples_;
     if (readPos < 0) readPos += MAX_DELAY_SAMPLES;
-    readPos %= MAX_DELAY_SAMPLES;
     
-    float delayed = buffer_[readPos] / 32767.0f;
-    if (isnan(delayed) || isinf(delayed)) {
-        clear();
-        return input;
-    }
+    float delayedL = bufferL_[readPos] / 32767.0f;
+    float delayedR = bufferR_[readPos] / 32767.0f;
 
-    // Write input + feedback to delay line (convert float to int16)
-    float toWrite = input + delayed * feedback_;
-    toWrite = constrain(toWrite, -1.0f, 1.0f);
-    buffer_[writePos_] = (int16_t)(toWrite * 32767.0f);
+    float toWriteL = left + delayedL * feedback_;
+    float toWriteR = right + delayedR * feedback_;
+
+    bufferL_[writePos_] = (int16_t)(constrain(toWriteL, -1.0f, 1.0f) * 32767.0f);
+    bufferR_[writePos_] = (int16_t)(constrain(toWriteR, -1.0f, 1.0f) * 32767.0f);
+
     writePos_++;
     if (writePos_ >= MAX_DELAY_SAMPLES) writePos_ = 0;
     
-    // Mix dry/wet
-    return input * (1.0f - mix_) + delayed * mix_;
+    left = left * (1.0f - mix_) + delayedL * mix_;
+    right = right * (1.0f - mix_) + delayedR * mix_;
 }
 
 // ============================================================================
@@ -88,9 +94,16 @@ void Saturation::setMix(float mix) {
 }
 
 float Saturation::process(float input) {
-    if (isnan(input) || isinf(input)) return 0.0f;
+    float left = input;
+    float right = input;
+    processStereo(left, right);
+    return (left + right) * 0.5f;
+}
 
-    float driven = input * drive_;
+void Saturation::processStereo(float& left, float& right) {
+    auto saturate = [&](float in) {
+        if (isnan(in) || isinf(in)) return 0.0f;
+        float driven = in * drive_;
     float saturated = 0.0f;
     
     switch (type_) {
@@ -130,10 +143,13 @@ float Saturation::process(float input) {
             saturated = driven;
     }
     
-    // Compensate gain
-    saturated /= max(1.0f, drive_ * 0.5f);
-    
-    return input * (1.0f - mix_) + saturated * mix_;
+        // Compensate gain
+        saturated /= max(1.0f, drive_ * 0.5f);
+        return in * (1.0f - mix_) + saturated * mix_;
+    };
+
+    left = saturate(left);
+    right = saturate(right);
 }
 
 // ============================================================================
@@ -166,53 +182,53 @@ void Chorus::setMix(float m) {
 }
 
 void Chorus::clear() {
-    memset(buffer_, 0, sizeof(buffer_));
+    memset(bufferL_, 0, sizeof(bufferL_));
+    memset(bufferR_, 0, sizeof(bufferR_));
     writePos_ = 0;
 }
 
 float Chorus::process(float input) {
-    if (isnan(input) || isinf(input)) return 0.0f;
-    
-    // Clamp to prevent overflow before conversion to int16
-    float clamped = input;
-    if (clamped > 1.0f) clamped = 1.0f;
-    else if (clamped < -1.0f) clamped = -1.0f;
+    float left = input;
+    float right = input;
+    processStereo(left, right);
+    return (left + right) * 0.5f;
+}
 
-    // Write to buffer (convert to int16)
-    buffer_[writePos_] = (int16_t)(clamped * 32000.0f);
+void Chorus::processStereo(float& left, float& right) {
+    if (isnan(left) || isinf(left)) left = 0.0f;
+    if (isnan(right) || isinf(right)) right = 0.0f;
+
+    bufferL_[writePos_] = (int16_t)(constrain(left, -1.0f, 1.0f) * 32000.0f);
+    bufferR_[writePos_] = (int16_t)(constrain(right, -1.0f, 1.0f) * 32000.0f);
     
-    // LFO using wavetable (much faster than sinf)
-    float lfoValue = Wavetables::readSine(lfoPhase_);
+    float lfoL = Wavetables::readSine(lfoPhase_);
+    float lfoR = Wavetables::readSine(lfoPhase_ + 0x40000000); // 90 deg offset
     lfoPhase_ += lfoIncrement_;
     
-    // Delay time: 5-12ms modulated by LFO
     float baseDelay = 0.007f * SAMPLE_RATE;
     float modAmount = depth_ * 0.003f * SAMPLE_RATE;
-    float delaySamples = baseDelay + lfoValue * modAmount;
     
-    // Safety clamp
-    if (delaySamples < 1.0f) delaySamples = 1.0f;
-    if (delaySamples > CHORUS_BUFFER_SIZE - 2) delaySamples = (float)CHORUS_BUFFER_SIZE - 2.0f;
+    auto readDelay = [&](int16_t* buf, float lfoVal) {
+        float delaySamples = baseDelay + lfoVal * modAmount;
+        delaySamples = constrain(delaySamples, 1.0f, (float)CHORUS_BUFFER_SIZE - 2.0f);
+
+        float readPosF = (float)writePos_ - delaySamples;
+        if (readPosF < 0.0f) readPosF += (float)CHORUS_BUFFER_SIZE;
+
+        int readPos0 = (int)readPosF;
+        int readPos1 = (readPos0 + 1) % CHORUS_BUFFER_SIZE;
+        float frac = readPosF - (float)readPos0;
+
+        return (buf[readPos0] * (1.0f - frac) + buf[readPos1] * frac) / 32000.0f;
+    };
+
+    float delayedL = readDelay(bufferL_, lfoL);
+    float delayedR = readDelay(bufferR_, lfoR);
     
-    // Read with linear interpolation
-    float readPosF = (float)writePos_ - delaySamples;
-    if (readPosF < 0.0f) readPosF += (float)CHORUS_BUFFER_SIZE;
+    writePos_ = (writePos_ + 1) % CHORUS_BUFFER_SIZE;
     
-    int readPos0 = (int)readPosF;
-    int readPos1 = readPos0 + 1;
-    if (readPos1 >= CHORUS_BUFFER_SIZE) readPos1 -= CHORUS_BUFFER_SIZE;
-    
-    float frac = readPosF - (float)readPos0;
-    
-    // Convert int16 to float and interpolate
-    float s0 = buffer_[readPos0] / 32000.0f;
-    float s1 = buffer_[readPos1] / 32000.0f;
-    float delayed = s0 * (1.0f - frac) + s1 * frac;
-    
-    writePos_++;
-    if (writePos_ >= CHORUS_BUFFER_SIZE) writePos_ = 0;
-    
-    return input * (1.0f - mix_) + delayed * mix_;
+    left = left * (1.0f - mix_) + delayedL * mix_;
+    right = right * (1.0f - mix_) + delayedR * mix_;
 }
 
 // ============================================================================
@@ -233,19 +249,22 @@ void EffectsChain::setEnabled(bool sat, bool chr, bool dly) {
 }
 
 float EffectsChain::process(float input) {
-    float signal = input;
-    
+    float left = input;
+    float right = input;
+    processStereo(left, right);
+    return (left + right) * 0.5f;
+}
+
+void EffectsChain::processStereo(float& left, float& right) {
     if (satEnabled_) {
-        signal = saturation.process(signal);
+        saturation.processStereo(left, right);
     }
     
     if (chorusEnabled_) {
-        signal = chorus.process(signal);
+        chorus.processStereo(left, right);
     }
     
     if (delayEnabled_) {
-        signal = delay.process(signal);
+        delay.processStereo(left, right);
     }
-    
-    return signal;
 }

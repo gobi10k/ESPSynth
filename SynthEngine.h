@@ -16,6 +16,7 @@
 #include "Resonator.h"
 #include "CombFilter.h"
 #include <driver/i2s_std.h>
+#include <atomic>
 
 constexpr uint8_t NUM_VOICES = 4;
 
@@ -87,6 +88,7 @@ public:
     void noteOn(uint8_t note, uint8_t velocity);
     void noteOff(uint8_t note);
     void allNotesOff();
+    void setSustainPedal(bool active);
     
     // Pitch bend (-8192 to +8191)
     void setPitchBend(int16_t value);
@@ -95,18 +97,21 @@ public:
     // Global oscillator params (applied to all voices)
     void setOscWaveform(int osc, Waveform wf);
     void setOscDetune(int osc, float cents);
+    void setOscCoarse(int osc, int8_t semitones);
     void setOscMix(float mix);
     void setPulseWidth(int osc, float pw);
+    void setOscMorph(int osc, float morph);
     
-    Waveform getOscWaveform(int osc) const { return oscWaveforms_[osc]; }
-    float getOscDetune(int osc) const { return oscDetune_[osc]; }
-    float getOscMix() const { return oscMix_; }
+    Waveform getOscWaveform(int osc) const { return pendingParams_.oscWaveforms[osc]; }
+    float getOscDetune(int osc) const { return pendingParams_.oscDetune[osc]; }
+    float getOscMix() const { return pendingParams_.oscMix; }
+    float getOscMorph(int osc) const { return pendingParams_.morph[osc]; }
 
     // Synthesis mode
     void setSynthMode(VoiceSynthMode mode);
     void setFMAmount(float amount);
-    VoiceSynthMode getSynthMode() const { return synthMode_; }
-    float getFMAmount() const { return fmAmount_; }
+    VoiceSynthMode getSynthMode() const { return pendingParams_.synthMode; }
+    float getFMAmount() const { return pendingParams_.fmAmount; }
     
     // Global filter
     void setFilterCutoff(float hz);
@@ -117,13 +122,13 @@ public:
     void setFilterKeyTracking(float amount);
     void setFilterType(VoiceFilterType type);
     
-    float getFilterCutoff() const { return filterCutoff_; }
-    float getFilterResonance() const { return filterReso_; }
-    FilterMode getFilterMode() const { return filterMode_; }
-    VoiceFilterType getFilterType() const { return filterType_; }
-    float getFilterEnvAmount() const { return filterEnvAmount_; }
-    float getFilterEnvVelocity() const { return filterEnvVelocity_; }
-    float getFilterKeyTracking() const { return filterKeyTracking_; }
+    float getFilterCutoff() const { return pendingParams_.filterCutoff; }
+    float getFilterResonance() const { return pendingParams_.filterReso; }
+    FilterMode getFilterMode() const { return pendingParams_.filterMode; }
+    VoiceFilterType getFilterType() const { return pendingParams_.filterType; }
+    float getFilterEnvAmount() const { return pendingParams_.filterEnvAmount; }
+    float getFilterEnvVelocity() const { return pendingParams_.filterEnvVelocity; }
+    float getFilterKeyTracking() const { return pendingParams_.filterKeyTracking; }
     
     // Envelopes
     void setAmpADSR(float a, float d, float s, float r);
@@ -142,6 +147,11 @@ public:
     // Arpeggiator
     Arpeggiator& getArp() { return arp_; }
     
+    // Euclidean Sequencer
+    EuclideanSequencer& getEuclidean() { return euclideanSeq_; }
+    void setEuclideanEnabled(bool en) { euclideanEnabled_ = en; }
+    bool isEuclideanEnabled() const { return euclideanEnabled_; }
+
     // Global Resonator (single instance for master chain)
     ResonatorBank& getResonator() { return resonator_; }
     void setResonatorEnabled(bool en) { resonatorEnabled_ = en; }
@@ -184,34 +194,17 @@ public:
         return 440.0f * powf(2.0f, (note - 69) / 12.0f);
     }
 
+    void setEuclideanNote(uint8_t note) { euclideanNote_ = note; }
+
 private:
     void processBlock();
+    void noteOnInternal(uint8_t note, uint8_t velocity);
     int allocateVoice(uint8_t note);
     int findVoiceForNote(uint8_t note);
     static void audioTaskWrapper(void* param);
     
     // Voices
     Voice voices_[NUM_VOICES];
-    
-    // Global params (copied to voices)
-    Waveform oscWaveforms_[2];
-    float oscDetune_[2];
-    float oscMix_;
-    float pulseWidth_[2];
-    VoiceSynthMode synthMode_;
-    float fmAmount_;
-    
-    float filterCutoff_;
-    float filterReso_;
-    FilterMode filterMode_;
-    VoiceFilterType filterType_;
-    float filterEnvAmount_;
-    float filterEnvVelocity_;
-    float filterKeyTracking_;
-    
-    float ampA_, ampD_, ampS_, ampR_;
-    float fltA_, fltD_, fltS_, fltR_;
-    float glideTime_;
     
     // Pitch bend
     SmoothedValue pitchBend_;
@@ -227,6 +220,11 @@ private:
     Arpeggiator arp_;
     bool lastArpGate_;
     
+    // Euclidean
+    EuclideanSequencer euclideanSeq_;
+    bool euclideanEnabled_;
+    uint8_t euclideanNote_;
+
     // Global Resonator and Comb (single instances, post-mix)
     ResonatorBank resonator_;
     CombFilter comb_;
@@ -252,6 +250,8 @@ private:
     // Runtime
     float currentVelocity_;
     volatile bool running_;
+    bool sustainPedalActive_ = false;
+    bool notesSustained_[128] = {false};
     volatile uint32_t blockCounter_ = 0;
     float voicePanL_[NUM_VOICES];
     float voicePanR_[NUM_VOICES];
@@ -259,6 +259,11 @@ private:
     i2s_chan_handle_t tx_handle_;
     AudioProfiler profiler_;
     int16_t blockBuffer_[DMA_BUFFER_SAMPLES * 2];
+
+    // Thread-safe parameters
+    GlobalVoiceParams activeParams_;
+    GlobalVoiceParams pendingParams_;
+    std::atomic<bool> paramsDirty_{false};
 };
 
 #endif

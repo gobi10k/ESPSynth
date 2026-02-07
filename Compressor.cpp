@@ -57,11 +57,23 @@ void Compressor::setKnee(float dB) {
 }
 
 float Compressor::process(float input) {
-    if (!enabled_) return input;
-    if (isnan(input) || isinf(input)) return 0.0f;
+    float out = input;
+    processStereo(input, input, out, out);
+    return out;
+}
+
+void Compressor::processStereo(float inL, float inR, float& outL, float& outR) {
+    if (!enabled_) {
+        outL = inL;
+        outR = inR;
+        return;
+    }
+
+    if (isnan(inL) || isinf(inL)) inL = 0.0f;
+    if (isnan(inR) || isinf(inR)) inR = 0.0f;
     
-    // Get input level
-    float inputAbs = fabsf(input);
+    // Get input level (sidechain: max of L/R)
+    float inputAbs = max(fabsf(inL), fabsf(inR));
     
     // Convert to dB using fast log2
     float inputDb = (inputAbs > 0.00001f) ? 6.0206f * fastLog2(inputAbs) : -100.0f;
@@ -90,7 +102,8 @@ float Compressor::process(float input) {
     gainReductionDb_ = envelope_;
     
     // Apply gain reduction
-    float gainLin = fastExp(-envelope_ * 0.115129f);
+    float gainLin = fastExp(-envelope_ * 0.115129f) * makeupGain_;
     
-    return input * gainLin * makeupGain_;
+    outL = inL * gainLin;
+    outR = inR * gainLin;
 }

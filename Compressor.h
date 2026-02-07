@@ -23,6 +23,7 @@ public:
     float getGainReduction() const { return gainReductionDb_; }
     
     float process(float input);
+    void processStereo(float inL, float inR, float& outL, float& outR);
     void setEnabled(bool enabled) { enabled_ = enabled; }
     bool isEnabled() const { return enabled_; }
 

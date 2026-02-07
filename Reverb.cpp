@@ -80,27 +80,28 @@ void FDNReverb::updateDecayCoefficients() {
 
 float FDNReverb::process(float input) {
     float l, r;
-    processStereo(input, l, r);
+    processStereo(input, input, l, r);
     return (l + r) * 0.5f;
 }
 
-void FDNReverb::processStereo(float input, float& left, float& right) {
+void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
     if (!enabled_) {
-        left = right = input;
+        outL = inL;
+        outR = inR;
         return;
     }
     
-    if (isnan(input) || isinf(input)) {
-        left = right = 0.0f;
-        return;
-    }
+    if (isnan(inL) || isinf(inL)) inL = 0.0f;
+    if (isnan(inR) || isinf(inR)) inR = 0.0f;
+
+    float monoInput = (inL + inR) * 0.5f;
 
     // Pre-delay using safe index math
     int preReadPos = (int)preDelayPos_ - (int)preDelayTime_;
     if (preReadPos < 0) preReadPos += PREDELAY_MAX;
 
     int16_t preDelayed = preDelayBuffer_[preReadPos];
-    float clampedInput = input;
+    float clampedInput = monoInput;
     if (clampedInput > 1.0f) clampedInput = 1.0f;
     else if (clampedInput < -1.0f) clampedInput = -1.0f;
     preDelayBuffer_[preDelayPos_] = (int16_t)(clampedInput * 32000.0f);
@@ -171,6 +172,6 @@ void FDNReverb::processStereo(float input, float& left, float& right) {
     float wetL = (outputs[0] + outputs[1]) * 0.5f;
     float wetR = (outputs[2] + outputs[3]) * 0.5f;
     
-    left = input * (1.0f - mix_) + wetL * mix_;
-    right = input * (1.0f - mix_) + wetR * mix_;
+    outL = inL * (1.0f - mix_) + wetL * mix_;
+    outR = inR * (1.0f - mix_) + wetR * mix_;
 }

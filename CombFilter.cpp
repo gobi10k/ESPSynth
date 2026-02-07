@@ -120,7 +120,7 @@ float CombFilter::process(float input) {
             break;
             
         case CombMode::ALLPASS:
-            output = -allpassCoef_ * input + delayed + allpassCoef_ * delayed;
+            output = delayed + allpassCoef_ * (input - delayed);
             toWrite = input + feedback_ * delayed;
             break;
             

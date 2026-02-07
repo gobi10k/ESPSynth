@@ -90,7 +90,8 @@ void DisplayManager::nextItem() {
     selectedItem_++;
     int maxItems = 4;
     if (currentPage_ == DisplayPage::MAIN) maxItems = 0;
-    else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
+    else if (currentPage_ == DisplayPage::FILTER) maxItems = 7;
+    else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
 
     if (selectedItem_ >= maxItems) selectedItem_ = 0;
 }
@@ -99,7 +100,8 @@ void DisplayManager::prevItem() {
     selectedItem_--;
     int maxItems = 4;
     if (currentPage_ == DisplayPage::MAIN) maxItems = 0;
-    else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
+    else if (currentPage_ == DisplayPage::FILTER) maxItems = 7;
+    else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
 
     if (selectedItem_ < 0) selectedItem_ = maxItems - 1;
     if (selectedItem_ < 0) selectedItem_ = 0;
@@ -125,6 +127,13 @@ void DisplayManager::adjustValue(int delta) {
                 }
                 case 2: engine_->setOscMix(constrain(engine_->getOscMix() + delta * 0.05f, 0.0f, 1.0f)); break;
                 case 3: engine_->setOscDetune(1, constrain(engine_->getOscDetune(1) + delta * 0.5f, -50.0f, 50.0f)); break;
+                case 4: {
+                    int mode = (int)engine_->getSynthMode() + delta;
+                    while (mode < 0) mode += 4;
+                    engine_->setSynthMode((VoiceSynthMode)(mode % 4));
+                    break;
+                }
+                case 5: engine_->setFMAmount(constrain(engine_->getFMAmount() + delta * 0.5f, 0.0f, 20.0f)); break;
             }
             break;
 
@@ -146,6 +155,7 @@ void DisplayManager::adjustValue(int delta) {
                 case 3: engine_->setFilterResonance(constrain(engine_->getFilterResonance() + delta * 0.05f, 0.0f, 1.0f)); break;
                 case 4: engine_->setFilterKeyTracking(constrain(engine_->getFilterKeyTracking() + delta * 0.1f, 0.0f, 1.0f)); break;
                 case 5: engine_->setFilterEnvVelocity(constrain(engine_->getFilterEnvVelocity() + delta * 0.1f, 0.0f, 1.0f)); break;
+                case 6: engine_->setFilterEnvAmount(constrain(engine_->getFilterEnvAmount() + delta * 0.05f, -1.0f, 1.0f)); break;
             }
             break;
 
@@ -201,9 +211,24 @@ void DisplayManager::drawMainPage() {
         }
     }
 
+    if (ampEnv > peakLevel_) {
+        peakLevel_ = ampEnv;
+        peakHoldCounter_ = 30; // ~1.5s at 20fps
+    } else if (peakHoldCounter_ > 0) {
+        peakHoldCounter_--;
+    } else {
+        peakLevel_ *= 0.95f; // Decay
+    }
+
     display_.drawStr(0, y, "LEVEL:");
     display_.drawFrame(40, y-7, 80, 8);
     display_.drawBox(41, y-6, (int)(ampEnv * 78), 6);
+
+    // Draw peak line
+    int peakX = 41 + (int)(peakLevel_ * 77);
+    if (peakX > 120) peakX = 120;
+    display_.drawLine(peakX, y-7, peakX, y-1);
+
     y += 14;
 
     display_.drawStr(0, y, "LFO:");
@@ -238,8 +263,14 @@ void DisplayManager::drawOscPage() {
     snprintf(buf, sizeof(buf), "%s MIX: %.0f%%", selectedItem_ == 2 ? ">" : " ", engine_->getOscMix() * 100.0f);
     display_.drawStr(0, 46, buf);
 
-    snprintf(buf, sizeof(buf), "%s DETUNE: %.1f", selectedItem_ == 3 ? ">" : " ", engine_->getOscDetune(1));
+    snprintf(buf, sizeof(buf), "%s DET: %.1f", selectedItem_ == 3 ? ">" : " ", engine_->getOscDetune(1));
+    display_.drawStr(64, 46, buf);
+
+    snprintf(buf, sizeof(buf), "%s MODE: %s", selectedItem_ == 4 ? ">" : " ", VOICE_SYNTH_MODE_NAMES[(int)engine_->getSynthMode()]);
     display_.drawStr(0, 58, buf);
+
+    snprintf(buf, sizeof(buf), "%s FM: %.1f", selectedItem_ == 5 ? ">" : " ", engine_->getFMAmount());
+    display_.drawStr(74, 58, buf);
 }
 
 void DisplayManager::drawFilterPage() {
@@ -261,11 +292,14 @@ void DisplayManager::drawFilterPage() {
     snprintf(buf, sizeof(buf), "%s RESO: %.0f%%", selectedItem_ == 3 ? ">" : " ", engine_->getFilterResonance() * 100.0f);
     display_.drawStr(0, 46, buf);
 
-    snprintf(buf, sizeof(buf), "%s KBD: %.0f%%", selectedItem_ == 4 ? ">" : " ", engine_->getFilterKeyTracking() * 100.0f);
+    snprintf(buf, sizeof(buf), "%s KBD:%.0f", selectedItem_ == 4 ? ">" : " ", engine_->getFilterKeyTracking() * 100.0f);
     display_.drawStr(0, 58, buf);
 
-    snprintf(buf, sizeof(buf), "%s VEL: %.0f%%", selectedItem_ == 5 ? ">" : " ", engine_->getFilterEnvVelocity() * 100.0f);
-    display_.drawStr(64, 58, buf);
+    snprintf(buf, sizeof(buf), "%s VEL:%.0f", selectedItem_ == 5 ? ">" : " ", engine_->getFilterEnvVelocity() * 100.0f);
+    display_.drawStr(44, 58, buf);
+
+    snprintf(buf, sizeof(buf), "%s ENV:%.0f", selectedItem_ == 6 ? ">" : " ", engine_->getFilterEnvAmount() * 100.0f);
+    display_.drawStr(88, 58, buf);
 }
 
 void DisplayManager::drawEffectsPage() {

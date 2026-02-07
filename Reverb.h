@@ -32,7 +32,7 @@ public:
     void setEnabled(bool en) { enabled_ = en; }
     
     float process(float input);
-    void processStereo(float input, float& left, float& right);
+    void processStereo(float inL, float inR, float& outL, float& outR);
     void reset();
 
 private:

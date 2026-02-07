@@ -62,6 +62,9 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
         case MIDI_CC::MOD_WHEEL:
             synth.getLFO(0).setDepth(val / 127.0f);
             break;
+        case MIDI_CC::SUSTAIN:
+            synth.setSustainPedal(val >= 64);
+            break;
         case MIDI_CC::VOLUME:
             synth.setMasterVolume(val / 127.0f);
             break;
@@ -608,6 +611,32 @@ void processCommand(const String& cmd) {
             }
             break;
             
+        // === EUCLIDEAN ===
+        case 'E':
+            if (c1 == 'x') {
+                synth.setEuclideanEnabled(!synth.isEuclideanEnabled());
+                Serial.printf("Euclidean: %s\n", synth.isEuclideanEnabled() ? "ON" : "OFF");
+            } else if (c1 == 's') {
+                synth.getEuclidean().setSteps((uint8_t)value);
+                Serial.printf("Euclidean steps: %d\n", (int)value);
+            } else if (c1 == 'p') {
+                synth.getEuclidean().setPulses((uint8_t)value);
+                Serial.printf("Euclidean pulses: %d\n", (int)value);
+            } else if (c1 == 'r') {
+                synth.getEuclidean().setRotation((uint8_t)value);
+                Serial.printf("Euclidean rotation: %d\n", (int)value);
+            } else if (c1 == 'w') {
+                synth.getEuclidean().setSwing(value / 100.0f);
+                Serial.printf("Euclidean swing: %.0f%%\n", value);
+            } else if (c1 == 'b') {
+                synth.getEuclidean().setTempo(value);
+                Serial.printf("Euclidean tempo: %.0f\n", value);
+            } else if (c1 == 'n') {
+                synth.setEuclideanNote((uint8_t)value);
+                Serial.printf("Euclidean note: %d\n", (int)value);
+            }
+            break;
+
         // === LFO ===
         case 'l':
             if (c1 == 'f') {

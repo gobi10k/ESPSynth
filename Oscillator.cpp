@@ -24,8 +24,11 @@ Oscillator::Oscillator() :
     amplitude_(0.5f),
     detuneCents_(0.0f),
     detuneMultiplier_(1.0f),
+    coarseTune_(0),
+    coarseMultiplier_(1.0f),
     pulseWidth_(0.5f),
     fmMod_(0.0f),
+    pwMod_(0.0f),
     pitchMod_(0.0f),
     pitchMult_(1.0f),
     noiseState_(22222),
@@ -41,7 +44,7 @@ void Oscillator::setFrequency(float freq, bool force) {
     if (!force && fabsf(freq - baseFrequency_) < 0.001f) return;
 
     baseFrequency_ = constrain(freq, 20.0f, 20000.0f);
-    frequency_ = baseFrequency_ * detuneMultiplier_;
+    frequency_ = baseFrequency_ * detuneMultiplier_ * coarseMultiplier_;
     updatePhaseIncrement();
     tableIndex_ = Wavetables::tableIndexForFreq(frequency_);
 }
@@ -65,7 +68,14 @@ void Oscillator::setAmplitude(float amp) {
 void Oscillator::setDetune(float cents) {
     detuneCents_ = constrain(cents, -100.0f, 100.0f);
     detuneMultiplier_ = powf(2.0f, detuneCents_ / 1200.0f);
-    frequency_ = baseFrequency_ * detuneMultiplier_;
+    frequency_ = baseFrequency_ * detuneMultiplier_ * coarseMultiplier_;
+    updatePhaseIncrement();
+}
+
+void Oscillator::setCoarse(int8_t semitones) {
+    coarseTune_ = constrain(semitones, -24, 24);
+    coarseMultiplier_ = powf(2.0f, coarseTune_ / 12.0f);
+    frequency_ = baseFrequency_ * detuneMultiplier_ * coarseMultiplier_;
     updatePhaseIncrement();
 }
 

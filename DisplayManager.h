@@ -52,6 +52,9 @@ private:
     volatile bool running_;
     DisplayPage currentPage_;
     int8_t selectedItem_;
+
+    float peakLevel_ = 0.0f;
+    int peakHoldCounter_ = 0;
 };
 
 #endif

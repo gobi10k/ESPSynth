@@ -5,37 +5,47 @@
 #include <math.h>
 
 SynthEngine::SynthEngine() :
-    oscMix_(0.5f),
-    filterCutoff_(2000.0f),
-    filterReso_(0.3f),
-    filterMode_(FilterMode::LOWPASS),
-    filterType_(VoiceFilterType::SVF),
-    filterEnvAmount_(0.5f),
-    filterEnvVelocity_(0.5f),
-    filterKeyTracking_(0.5f),
-    ampA_(0.01f), ampD_(0.1f), ampS_(0.7f), ampR_(0.3f),
-    fltA_(0.01f), fltD_(0.2f), fltS_(0.3f), fltR_(0.5f),
-    glideTime_(0.0f),
     pitchBendRange_(2),
     lastArpGate_(false),
-    synthMode_(VoiceSynthMode::STANDARD),
-    fmAmount_(1.0f),
     resonatorEnabled_(false),
     combEnabled_(false),
     granularMix_(0.0f),
     granularEnabled_(false),
+    euclideanEnabled_(false),
+    euclideanNote_(36),
     globalPan_(0.0f),
     currentVelocity_(0.0f),
     running_(false),
     audioTaskHandle_(nullptr)
 {
-    oscWaveforms_[0] = Waveform::SAW;
-    oscWaveforms_[1] = Waveform::SAW;
-    oscDetune_[0] = 0.0f;
-    oscDetune_[1] = 7.0f;
-    pulseWidth_[0] = 0.5f;
-    pulseWidth_[1] = 0.5f;
-    
+    // Initialize parameters
+    pendingParams_.oscWaveforms[0] = Waveform::SAW;
+    pendingParams_.oscWaveforms[1] = Waveform::SAW;
+    pendingParams_.oscDetune[0] = 0.0f;
+    pendingParams_.oscDetune[1] = 7.0f;
+    pendingParams_.oscCoarse[0] = 0;
+    pendingParams_.oscCoarse[1] = 0;
+    pendingParams_.oscMix = 0.5f;
+    pendingParams_.pulseWidth[0] = 0.5f;
+    pendingParams_.pulseWidth[1] = 0.5f;
+    pendingParams_.morph[0] = 0.0f;
+    pendingParams_.morph[1] = 0.0f;
+    pendingParams_.synthMode = VoiceSynthMode::STANDARD;
+    pendingParams_.fmAmount = 1.0f;
+    pendingParams_.filterType = VoiceFilterType::SVF;
+    pendingParams_.filterCutoff = 2000.0f;
+    pendingParams_.filterReso = 0.3f;
+    pendingParams_.filterMode = FilterMode::LOWPASS;
+    pendingParams_.filterEnvAmount = 0.5f;
+    pendingParams_.filterEnvVelocity = 0.5f;
+    pendingParams_.filterKeyTracking = 0.5f;
+    pendingParams_.ampA = 0.01f; pendingParams_.ampD = 0.1f; pendingParams_.ampS = 0.7f; pendingParams_.ampR = 0.3f;
+    pendingParams_.fltA = 0.01f; pendingParams_.fltD = 0.2f; pendingParams_.fltS = 0.3f; pendingParams_.fltR = 0.5f;
+    pendingParams_.glideTime = 0.0f;
+
+    activeParams_ = pendingParams_;
+    paramsDirty_ = true;
+
     pitchBend_.setImmediate(0.0f);
     pitchBend_.setSmoothTime(5.0f);
     
@@ -170,6 +180,7 @@ int SynthEngine::allocateVoice(uint8_t note) {
 
 void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
     currentVelocity_ = velocity / 127.0f;
+    notesSustained_[note % 128] = false;
 
     // If arpeggiator is on, feed it instead
     if (arp_.getMode() != ArpMode::OFF) {
@@ -177,30 +188,19 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
         return;
     }
     
+    noteOnInternal(note, velocity);
+}
+
+void SynthEngine::noteOnInternal(uint8_t note, uint8_t velocity) {
     int voice = allocateVoice(note);
-    if (voice < 0) return; // Should not happen with stealing
+    if (voice < 0) return;
     
-    // Configure voice (minimal settings)
-    voices_[voice].setOscWaveform(0, oscWaveforms_[0]);
-    voices_[voice].setOscWaveform(1, oscWaveforms_[1]);
-    voices_[voice].setOscMix(oscMix_);
-    voices_[voice].setSynthMode(synthMode_);
-    voices_[voice].setFMAmount(fmAmount_);
-    voices_[voice].setFilterType(filterType_);
-    voices_[voice].setFilterCutoff(filterCutoff_);
-    voices_[voice].setFilterResonance(filterReso_);
-    voices_[voice].setFilterMode(filterMode_);
-    voices_[voice].setFilterEnvAmount(filterEnvAmount_);
-    voices_[voice].setFilterEnvVelocity(filterEnvVelocity_);
-    voices_[voice].setFilterKeyTracking(filterKeyTracking_);
-    voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
-    voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
+    voices_[voice].applyParams(activeParams_);
 
     // Combine spread and global pan
     float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
     voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
 
-    // Melodic tracking for resonator
     if (resonatorEnabled_) {
         resonator_.setFrequency(midiToFreq(note));
     }
@@ -213,12 +213,35 @@ void SynthEngine::noteOff(uint8_t note) {
         arp_.noteOff(note);
         return;
     }
+
+    if (sustainPedalActive_) {
+        notesSustained_[note % 128] = true;
+        return;
+    }
     
     // Find voice playing this note
     for (int i = 0; i < NUM_VOICES; i++) {
         if (voices_[i].isActive() && voices_[i].getNote() == note) {
             voices_[i].noteOff();
             break;
+        }
+    }
+}
+
+void SynthEngine::setSustainPedal(bool active) {
+    if (sustainPedalActive_ == active) return;
+    sustainPedalActive_ = active;
+
+    if (!sustainPedalActive_) {
+        for (int i = 0; i < 128; i++) {
+            if (notesSustained_[i]) {
+                for (int v = 0; v < NUM_VOICES; v++) {
+                    if (voices_[v].isActive() && voices_[v].getNote() == i) {
+                        voices_[v].noteOff();
+                    }
+                }
+                notesSustained_[i] = false;
+            }
         }
     }
 }
@@ -242,124 +265,108 @@ void SynthEngine::setPitchBendRange(uint8_t semitones) {
 
 void SynthEngine::setOscWaveform(int osc, Waveform wf) {
     if (osc >= 0 && osc < 2) {
-        oscWaveforms_[osc] = wf;
-        for (int i = 0; i < NUM_VOICES; i++) {
-            voices_[i].setOscWaveform(osc, wf);
-        }
+        pendingParams_.oscWaveforms[osc] = wf;
+        paramsDirty_ = true;
+    }
+}
+
+void SynthEngine::setOscCoarse(int osc, int8_t semitones) {
+    if (osc >= 0 && osc < 2) {
+        pendingParams_.oscCoarse[osc] = semitones;
+        paramsDirty_ = true;
+    }
+}
+
+void SynthEngine::setOscMorph(int osc, float morph) {
+    if (osc >= 0 && osc < 2) {
+        pendingParams_.morph[osc] = morph;
+        paramsDirty_ = true;
     }
 }
 
 void SynthEngine::setOscDetune(int osc, float cents) {
     if (osc >= 0 && osc < 2) {
-        oscDetune_[osc] = cents;
-        for (int i = 0; i < NUM_VOICES; i++) {
-            voices_[i].setOscDetune(osc, cents);
-        }
+        pendingParams_.oscDetune[osc] = cents;
+        paramsDirty_ = true;
     }
 }
 
 void SynthEngine::setOscMix(float mix) {
-    oscMix_ = constrain(mix, 0.0f, 1.0f);
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setOscMix(mix);
-    }
+    pendingParams_.oscMix = constrain(mix, 0.0f, 1.0f);
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setSynthMode(VoiceSynthMode mode) {
-    synthMode_ = mode;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setSynthMode(mode);
-    }
+    pendingParams_.synthMode = mode;
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setFMAmount(float amount) {
-    fmAmount_ = amount;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFMAmount(amount);
-    }
+    pendingParams_.fmAmount = amount;
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setPulseWidth(int osc, float pw) {
     if (osc >= 0 && osc < 2) {
-        pulseWidth_[osc] = pw;
+        pendingParams_.pulseWidth[osc] = pw;
+        paramsDirty_ = true;
     }
 }
 
 void SynthEngine::setFilterCutoff(float hz) {
-    filterCutoff_ = constrain(hz, 20.0f, 20000.0f);
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFilterCutoff(hz);
-    }
+    pendingParams_.filterCutoff = constrain(hz, 20.0f, 20000.0f);
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setFilterResonance(float r) {
-    filterReso_ = constrain(r, 0.0f, 1.0f);
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFilterResonance(r);
-    }
+    pendingParams_.filterReso = constrain(r, 0.0f, 1.0f);
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setFilterMode(FilterMode mode) {
-    filterMode_ = mode;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFilterMode(mode);
-    }
+    pendingParams_.filterMode = mode;
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setFilterEnvAmount(float amount) {
-    filterEnvAmount_ = constrain(amount, -1.0f, 1.0f);
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFilterEnvAmount(amount);
-    }
+    pendingParams_.filterEnvAmount = constrain(amount, -1.0f, 1.0f);
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setFilterEnvVelocity(float amount) {
-    filterEnvVelocity_ = constrain(amount, 0.0f, 1.0f);
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFilterEnvVelocity(amount);
-    }
+    pendingParams_.filterEnvVelocity = constrain(amount, 0.0f, 1.0f);
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setFilterKeyTracking(float amount) {
-    filterKeyTracking_ = constrain(amount, 0.0f, 1.0f);
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFilterKeyTracking(amount);
-    }
+    pendingParams_.filterKeyTracking = constrain(amount, 0.0f, 1.0f);
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setFilterType(VoiceFilterType type) {
-    filterType_ = type;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFilterType(type);
-    }
+    pendingParams_.filterType = type;
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setAmpADSR(float a, float d, float s, float r) {
-    // -1 means don't change
-    if (a >= 0) ampA_ = a;
-    if (d >= 0) ampD_ = d;
-    if (s >= 0) ampS_ = s;
-    if (r >= 0) ampR_ = r;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
-    }
+    if (a >= 0) pendingParams_.ampA = a;
+    if (d >= 0) pendingParams_.ampD = d;
+    if (s >= 0) pendingParams_.ampS = s;
+    if (r >= 0) pendingParams_.ampR = r;
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setFilterADSR(float a, float d, float s, float r) {
-    if (a >= 0) fltA_ = a;
-    if (d >= 0) fltD_ = d;
-    if (s >= 0) fltS_ = s;
-    if (r >= 0) fltR_ = r;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
-    }
+    if (a >= 0) pendingParams_.fltA = a;
+    if (d >= 0) pendingParams_.fltD = d;
+    if (s >= 0) pendingParams_.fltS = s;
+    if (r >= 0) pendingParams_.fltR = r;
+    paramsDirty_ = true;
 }
 
 void SynthEngine::setGlideTime(float ms) {
-    glideTime_ = ms;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        voices_[i].setGlideTime(ms);
-    }
+    pendingParams_.glideTime = ms;
+    paramsDirty_ = true;
 }
 
 LFO& SynthEngine::getLFO(int index) {
@@ -387,6 +394,14 @@ void SynthEngine::processBlock() {
     blockCounter_++;
 
     // --- Control Rate Update (Once per 128 samples) ---
+    if (paramsDirty_) {
+        activeParams_ = pendingParams_;
+        paramsDirty_ = false;
+        for (int v = 0; v < NUM_VOICES; v++) {
+            voices_[v].applyParams(activeParams_);
+        }
+    }
+
     // Massive CPU optimization: Move slow modulation out of the sample loop
     float lfo1 = lfos_[0].process(DMA_BUFFER_SAMPLES);
     float lfo2 = lfos_[1].process(DMA_BUFFER_SAMPLES);
@@ -395,12 +410,18 @@ void SynthEngine::processBlock() {
     modMatrix_.setSourceValue(ModSource::VELOCITY, currentVelocity_);
     modMatrix_.process();
     float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
-    float pitchMod = modMatrix_.getModulation(ModDest::OSC_PITCH) * 2.0f;
+    for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) pitchBend_.process();
+    float pbSemitones = pitchBend_.getCurrent();
+    float pitchMod = modMatrix_.getModulation(ModDest::OSC_PITCH) * 2.0f + pbSemitones;
+    float pw1Mod = modMatrix_.getModulation(ModDest::OSC1_PW);
+    float pw2Mod = modMatrix_.getModulation(ModDest::OSC2_PW);
 
     for (int v = 0; v < NUM_VOICES; v++) {
         if (voices_[v].isActive()) {
             voices_[v].setGlobalFilterMod(filterMod);
             voices_[v].setGlobalPitchMod(pitchMod);
+            voices_[v].setGlobalOsc1PWMod(pw1Mod);
+            voices_[v].setGlobalOsc2PWMod(pw2Mod);
             voices_[v].updateBlockParams();
 
             // Pre-calculate panning coefficients
@@ -413,6 +434,13 @@ void SynthEngine::processBlock() {
     // --------------------------------------------------
     
     for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
+        // Euclidean
+        if (euclideanEnabled_) {
+            if (euclideanSeq_.process()) {
+                noteOnInternal(euclideanNote_, euclideanSeq_.getVelocity());
+            }
+        }
+
         // Process arpeggiator (only if mode is not OFF and we have notes)
         if (arp_.getMode() != ArpMode::OFF) {
             if (arp_.process()) {
@@ -424,23 +452,7 @@ void SynthEngine::processBlock() {
                 
                 int voice = allocateVoice(arp_.getCurrentNote());
                 if (voice >= 0 && voice < NUM_VOICES) {
-                    voices_[voice].setOscWaveform(0, oscWaveforms_[0]);
-                    voices_[voice].setOscWaveform(1, oscWaveforms_[1]);
-                    voices_[voice].setOscDetune(0, oscDetune_[0]);
-                    voices_[voice].setOscDetune(1, oscDetune_[1]);
-                    voices_[voice].setOscMix(oscMix_);
-                    voices_[voice].setSynthMode(synthMode_);
-                    voices_[voice].setFMAmount(fmAmount_);
-                    voices_[voice].setFilterType(filterType_);
-                    voices_[voice].setFilterCutoff(filterCutoff_);
-                    voices_[voice].setFilterResonance(filterReso_);
-                    voices_[voice].setFilterMode(filterMode_);
-                    voices_[voice].setFilterEnvAmount(filterEnvAmount_);
-                    voices_[voice].setFilterEnvVelocity(filterEnvVelocity_);
-                    voices_[voice].setFilterKeyTracking(filterKeyTracking_);
-                    voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
-                    voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
-                    voices_[voice].setGlideTime(glideTime_);
+                    voices_[voice].applyParams(activeParams_);
 
                     // Combine spread and global pan
                     float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
@@ -492,9 +504,9 @@ void SynthEngine::processBlock() {
             right += s * voicePanR_[3];
         }
         
-        // Scale down for mixing
-        left *= 0.3f;
-        right *= 0.3f;
+        // Scale down for mixing (1.0 / sqrt(NUM_VOICES))
+        left *= 0.5f;
+        right *= 0.5f;
 
         // Apply Granular exciter (if enabled) - Mono input, but we can spread it
         if (granularEnabled_) {
@@ -520,27 +532,23 @@ void SynthEngine::processBlock() {
         if (isnan(left) || isinf(left)) left = 0.0f;
         if (isnan(right) || isinf(right)) right = 0.0f;
 
-        // Process global effects - mono for now but we'll adapt them
-        float monoInput = (left + right) * 0.5f;
-        float wetMono = effects_.process(monoInput);
+        // Process global effects in stereo
+        effects_.processStereo(left, right);
 
-        // Reverb - let's make it pseudo-stereo
+        // Reverb - stereo processing
         float wetL, wetR;
-        reverb_.processStereo(monoInput, wetL, wetR);
+        reverb_.processStereo(left, right, wetL, wetR);
 
-        float finalL = wetMono * 0.5f + wetL;
-        float finalR = wetMono * 0.5f + wetR;
-
-        // Compressor on stereo
-        float compL = compressor_.process(finalL);
-        float compR = compressor_.process(finalR);
+        // Compressor on stereo (before master volume and soft clip)
+        float compL, compR;
+        compressor_.processStereo(wetL, wetR, compL, compR);
 
         // Master volume
         float vol = masterVolume_.process();
         left = compL * vol;
         right = compR * vol;
         
-        // Soft clip
+        // Final Soft clip / Limiter
         left = fastTanh(left);
         right = fastTanh(right);
         

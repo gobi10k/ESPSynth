@@ -32,6 +32,29 @@ enum class VoiceSynthMode : uint8_t {
 extern const char* VOICE_FILTER_NAMES[];
 extern const char* VOICE_SYNTH_MODE_NAMES[];
 
+struct GlobalVoiceParams {
+    Waveform oscWaveforms[2];
+    float oscDetune[2];
+    int8_t oscCoarse[2];
+    float oscMix;
+    float pulseWidth[2];
+    float morph[2];
+    VoiceSynthMode synthMode;
+    float fmAmount;
+
+    VoiceFilterType filterType;
+    float filterCutoff;
+    float filterReso;
+    FilterMode filterMode;
+    float filterEnvAmount;
+    float filterEnvVelocity;
+    float filterKeyTracking;
+
+    float ampA, ampD, ampS, ampR;
+    float fltA, fltD, fltS, fltR;
+    float glideTime;
+};
+
 class Voice {
 public:
     Voice();
@@ -80,10 +103,14 @@ public:
     // Modulation
     void setGlobalFilterMod(float mod) { globalFilterMod_ = mod; }
     void setGlobalPitchMod(float mod) { globalPitchMod_ = mod; }
+    void setGlobalOsc1PWMod(float mod) { globalOsc1PWMod_ = mod; }
+    void setGlobalOsc2PWMod(float mod) { globalOsc2PWMod_ = mod; }
     void updateBlockParams();
 
     // Glide
     void setGlideTime(float ms);
+
+    void applyParams(const GlobalVoiceParams& params);
 
 private:
     float midiToFreq(uint8_t note);
@@ -114,6 +141,8 @@ private:
     // Modulation
     float globalFilterMod_;
     float globalPitchMod_;
+    float globalOsc1PWMod_;
+    float globalOsc2PWMod_;
 
     // Envelopes
     Envelope ampEnv_;
