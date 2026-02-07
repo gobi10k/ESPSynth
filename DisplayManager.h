@@ -11,6 +11,9 @@ enum class DisplayPage : uint8_t {
     OSCILLATORS,
     FILTER,
     ENVELOPES,
+    LFO,
+    MOD_MATRIX,
+    ARP,
     EFFECTS,
     MIXER,
     SD_BROWSER,
@@ -47,6 +50,9 @@ private:
     void drawOscPage();
     void drawFilterPage();
     void drawEnvPage();
+    void drawLFOPage();
+    void drawModPage();
+    void drawArpPage();
     void drawEffectsPage();
     void drawMixerPage();
     void drawSDPage();
@@ -60,6 +66,7 @@ private:
     volatile bool running_;
     DisplayPage currentPage_;
     int8_t selectedItem_;
+    int8_t modSlotIndex_;
     int8_t sdFileIndex_;
     int8_t sdSlot_;
     bool sdWaveMode_; // true = waves, false = presets

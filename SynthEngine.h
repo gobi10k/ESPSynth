@@ -183,6 +183,7 @@ public:
     // Wavetable manager
     WavetableManager& getWavetableManager() { return wtManager_; }
     void loadWavetableForOsc(int osc, int slot, const char* filename);
+    int getLoadedWaveIndex(int slot) const { return currentWaveIdx_[slot]; }
 
     // Master
     void setMasterVolume(float vol);
@@ -271,6 +272,7 @@ private:
     
     // Wavetable manager
     WavetableManager wtManager_;
+    int currentWaveIdx_[2];
 
     // Master
     SmoothedValue masterVolume_;

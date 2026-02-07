@@ -82,6 +82,7 @@ public:
     // Modulation
     void setGlobalFilterMod(float mod) { globalFilterMod_ = mod; }
     void setGlobalPitchMod(float mod) { globalPitchMod_ = mod; }
+    void setVoicePitchOffset(float semitones) { voicePitchOffset_ = semitones; }
     void updateBlockParams();
 
     // Glide
@@ -116,6 +117,7 @@ private:
     // Modulation
     float globalFilterMod_;
     float globalPitchMod_;
+    float voicePitchOffset_;
 
     // Envelopes
     Envelope ampEnv_;

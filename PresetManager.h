@@ -88,6 +88,15 @@ struct PresetData {
     uint8_t unisonVoices;
     uint8_t unisonDetune;
     uint8_t waveMorph;
+
+    // Mod Matrix (8 slots: [src:4][dest:4], amount:16)
+    uint8_t modSrcDest[8];
+    int16_t modAmount[8];
+
+    // SD Waves
+    uint8_t waveSlotA;
+    uint8_t waveSlotB;
+
     uint8_t reserved[7];
     
     uint32_t checksum;

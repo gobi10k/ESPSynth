@@ -13,6 +13,7 @@ DisplayManager::DisplayManager() :
     running_(false),
     currentPage_(DisplayPage::MAIN),
     selectedItem_(0),
+    modSlotIndex_(0),
     sdFileIndex_(0),
     sdSlot_(0),
     sdWaveMode_(false),
@@ -97,6 +98,9 @@ void DisplayManager::nextItem() {
     else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
     else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
     else if (currentPage_ == DisplayPage::ENVELOPES) maxItems = 8;
+    else if (currentPage_ == DisplayPage::LFO) maxItems = 8;
+    else if (currentPage_ == DisplayPage::MOD_MATRIX) maxItems = 4;
+    else if (currentPage_ == DisplayPage::ARP) maxItems = 5;
     else if (currentPage_ == DisplayPage::MIXER) maxItems = 5;
     else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 3;
 
@@ -110,6 +114,9 @@ void DisplayManager::prevItem() {
     else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
     else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
     else if (currentPage_ == DisplayPage::ENVELOPES) maxItems = 8;
+    else if (currentPage_ == DisplayPage::LFO) maxItems = 8;
+    else if (currentPage_ == DisplayPage::MOD_MATRIX) maxItems = 4;
+    else if (currentPage_ == DisplayPage::ARP) maxItems = 5;
     else if (currentPage_ == DisplayPage::MIXER) maxItems = 5;
     else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 3;
 
@@ -158,6 +165,66 @@ void DisplayManager::adjustValue(int delta) {
                 case 4: engine_->getEffects().chorus.setMix(constrain(engine_->getEffects().chorus.getMix() + delta * 0.05f, 0.0f, 1.0f)); break;
             }
             break;
+
+        case DisplayPage::LFO: {
+            int lfoIdx = selectedItem_ / 4;
+            int param = selectedItem_ % 4;
+            LFO& lfo = engine_->getLFO(lfoIdx);
+            switch (param) {
+                case 0: {
+                    int wf = static_cast<int>(lfo.getWaveform()) + delta;
+                    while (wf < 0) wf += static_cast<int>(LFOWaveform::NUM_WAVEFORMS);
+                    lfo.setWaveform(static_cast<LFOWaveform>(wf % static_cast<int>(LFOWaveform::NUM_WAVEFORMS)));
+                    break;
+                }
+                case 1: lfo.setFrequency(constrain(lfo.getFrequency() + delta * 0.1f, 0.01f, 50.0f)); break;
+                case 2: lfo.setDepth(constrain(lfo.getDepth() + delta * 0.05f, 0.0f, 1.0f)); break;
+                case 3: /* could be phase or sync */ break;
+            }
+            break;
+        }
+
+        case DisplayPage::ARP: {
+            Arpeggiator& arp = engine_->getArp();
+            switch (selectedItem_) {
+                case 0: {
+                    int mode = static_cast<int>(arp.getMode()) + delta;
+                    while (mode < 0) mode += static_cast<int>(ArpMode::NUM_MODES);
+                    arp.setMode(static_cast<ArpMode>(mode % static_cast<int>(ArpMode::NUM_MODES)));
+                    break;
+                }
+                case 1: arp.setTempo(constrain(arp.getTempo() + delta * 2.0f, 20.0f, 300.0f)); break;
+                case 2: {
+                    int div = arp.getDivision();
+                    if (delta > 0) div *= 2; else if (delta < 0) div /= 2;
+                    arp.setDivision(constrain(div, 1, 32));
+                    break;
+                }
+                case 3: arp.setGateLength(constrain(arp.getGateLength() + delta * 0.05f, 0.05f, 1.0f)); break;
+                case 4: arp.setOctaveRange(constrain(arp.getOctaveRange() + delta, 1, 4)); break;
+            }
+            break;
+        }
+
+        case DisplayPage::MOD_MATRIX: {
+            if (selectedItem_ == 0) {
+                modSlotIndex_ = constrain(modSlotIndex_ + delta, 0, NUM_MOD_SLOTS - 1);
+            } else {
+                ModSlot& slot = engine_->getModMatrix().getSlot(modSlotIndex_);
+                if (selectedItem_ == 1) {
+                    int src = static_cast<int>(slot.source) + delta;
+                    while (src < 0) src += static_cast<int>(ModSource::NUM_SOURCES);
+                    slot.source = static_cast<ModSource>(src % static_cast<int>(ModSource::NUM_SOURCES));
+                } else if (selectedItem_ == 2) {
+                    int dest = static_cast<int>(slot.destination) + delta;
+                    while (dest < 0) dest += static_cast<int>(ModDest::NUM_DESTINATIONS);
+                    slot.destination = static_cast<ModDest>(dest % static_cast<int>(ModDest::NUM_DESTINATIONS));
+                } else if (selectedItem_ == 3) {
+                    slot.amount = constrain(slot.amount + delta * 0.05f, -1.0f, 1.0f);
+                }
+            }
+            break;
+        }
 
         case DisplayPage::ENVELOPES:
             switch (selectedItem_) {
@@ -232,6 +299,9 @@ void DisplayManager::drawUI() {
         case DisplayPage::OSCILLATORS: drawOscPage(); break;
         case DisplayPage::FILTER: drawFilterPage(); break;
         case DisplayPage::ENVELOPES: drawEnvPage(); break;
+        case DisplayPage::LFO: drawLFOPage(); break;
+        case DisplayPage::MOD_MATRIX: drawModPage(); break;
+        case DisplayPage::ARP: drawArpPage(); break;
         case DisplayPage::EFFECTS: drawEffectsPage(); break;
         case DisplayPage::MIXER: drawMixerPage(); break;
         case DisplayPage::SD_BROWSER: drawSDPage(); break;
@@ -307,6 +377,77 @@ void DisplayManager::drawOscPage() {
 
     snprintf(buf, sizeof(buf), "%s MORPH: %.0f%%", selectedItem_ == 5 ? ">" : " ", engine_->getVoice(0).getOsc(0).getMorph() * 100.0f);
     display_.drawStr(0, 58, buf);
+}
+
+extern const char* MOD_SOURCE_NAMES[];
+extern const char* MOD_DEST_NAMES[];
+extern const char* LFO_WAVEFORM_NAMES[];
+
+void DisplayManager::drawLFOPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "LFOS");
+    display_.drawLine(0, 9, 127, 9);
+
+    for (int i = 0; i < 2; i++) {
+        LFO& lfo = engine_->getLFO(i);
+        int y = 20 + i * 24;
+        snprintf(buf, sizeof(buf), "LFO%d", i + 1);
+        display_.drawStr(0, y, buf);
+
+        snprintf(buf, sizeof(buf), "%sW:%s", selectedItem_ == (i * 4) ? ">" : " ", LFO_WAVEFORM_NAMES[static_cast<int>(lfo.getWaveform())]);
+        display_.drawStr(35, y, buf);
+
+        snprintf(buf, sizeof(buf), "%sF:%.1f", selectedItem_ == (i * 4 + 1) ? ">" : " ", lfo.getFrequency());
+        display_.drawStr(80, y, buf);
+
+        snprintf(buf, sizeof(buf), "%sD:%.0f%%", selectedItem_ == (i * 4 + 2) ? ">" : " ", lfo.getDepth() * 100.0f);
+        display_.drawStr(35, y + 10, buf);
+    }
+}
+
+extern const char* ARP_MODE_NAMES[];
+
+void DisplayManager::drawArpPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "ARPEGGIATOR");
+    display_.drawLine(0, 9, 127, 9);
+
+    Arpeggiator& arp = engine_->getArp();
+
+    snprintf(buf, sizeof(buf), "%s MODE: %s", selectedItem_ == 0 ? ">" : " ", ARP_MODE_NAMES[static_cast<int>(arp.getMode())]);
+    display_.drawStr(0, 22, buf);
+
+    snprintf(buf, sizeof(buf), "%s TEMPO: %.0f BPM", selectedItem_ == 1 ? ">" : " ", arp.getTempo());
+    display_.drawStr(0, 34, buf);
+
+    snprintf(buf, sizeof(buf), "%s DIV: 1/%d", selectedItem_ == 2 ? ">" : " ", arp.getDivision());
+    display_.drawStr(0, 46, buf);
+
+    snprintf(buf, sizeof(buf), "%s GATE: %.0f%%", selectedItem_ == 3 ? ">" : " ", arp.getGateLength() * 100.0f);
+    display_.drawStr(0, 58, buf);
+
+    snprintf(buf, sizeof(buf), "%s OCT: %d", selectedItem_ == 4 ? ">" : " ", arp.getOctaveRange());
+    display_.drawStr(80, 58, buf);
+}
+
+void DisplayManager::drawModPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "MOD MATRIX");
+    display_.drawLine(0, 9, 127, 9);
+
+    snprintf(buf, sizeof(buf), "%s SLOT: %d", selectedItem_ == 0 ? ">" : " ", modSlotIndex_ + 1);
+    display_.drawStr(0, 20, buf);
+
+    ModSlot& slot = engine_->getModMatrix().getSlot(modSlotIndex_);
+
+    snprintf(buf, sizeof(buf), "%s SRC: %s", selectedItem_ == 1 ? ">" : " ", MOD_SOURCE_NAMES[static_cast<int>(slot.source)]);
+    display_.drawStr(0, 32, buf);
+
+    snprintf(buf, sizeof(buf), "%s DST: %s", selectedItem_ == 2 ? ">" : " ", MOD_DEST_NAMES[static_cast<int>(slot.destination)]);
+    display_.drawStr(0, 44, buf);
+
+    snprintf(buf, sizeof(buf), "%s AMT: %.2f", selectedItem_ == 3 ? ">" : " ", slot.amount);
+    display_.drawStr(0, 56, buf);
 }
 
 void DisplayManager::drawEnvPage() {

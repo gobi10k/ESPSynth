@@ -169,6 +169,16 @@ PresetData PresetManager::getInitPreset() {
     p.synthMode = (uint8_t)VoiceSynthMode::STANDARD;
     p.fmAmount = 10; // 1.0
 
+    p.unisonVoices = 1;
+    p.unisonDetune = 10;
+    p.waveMorph = 0;
+
+    memset(p.modSrcDest, 0, sizeof(p.modSrcDest));
+    memset(p.modAmount, 0, sizeof(p.modAmount));
+
+    p.waveSlotA = 255;
+    p.waveSlotB = 255;
+
     return p;
 }
 

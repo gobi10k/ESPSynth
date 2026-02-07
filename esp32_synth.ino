@@ -174,6 +174,10 @@ void applyPreset(const PresetData& p) {
     synth.setOscDetune(0, p.osc1Detune);
     synth.setOscDetune(1, p.osc2Detune);
     synth.setOscMix(p.oscMix / 100.0f);
+    for (int i = 0; i < NUM_VOICES; i++) {
+        synth.getVoice(i).getOsc(0).setPulseWidth(p.osc1PW / 100.0f);
+        synth.getVoice(i).getOsc(1).setPulseWidth(p.osc2PW / 100.0f);
+    }
     
     synth.setFilterCutoff(p.filterCutoff);
     synth.setFilterResonance(p.filterReso / 100.0f);
@@ -228,6 +232,24 @@ void applyPreset(const PresetData& p) {
         synth.getVoice(i).getOsc(1).setMorph(morph);
     }
 
+    // Mod Matrix
+    synth.getModMatrix().clearAll();
+    for (int i = 0; i < 8; i++) {
+        ModSource src = (ModSource)(p.modSrcDest[i] >> 4);
+        ModDest dest = (ModDest)(p.modSrcDest[i] & 0x0F);
+        if (src != ModSource::NONE && dest != ModDest::NONE) {
+            synth.getModMatrix().setSlot(i, src, dest, p.modAmount[i] / 1000.0f);
+        }
+    }
+
+    // SD Waves
+    if (sd.isAvailable()) {
+        const char* waveA = synth.getWavetableManager().getWaveFileName(p.waveSlotA);
+        if (waveA) synth.loadWavetableForOsc(0, 0, waveA);
+        const char* waveB = synth.getWavetableManager().getWaveFileName(p.waveSlotB);
+        if (waveB) synth.loadWavetableForOsc(0, 1, waveB);
+    }
+
     Serial.printf("Loaded: %s\n", p.name);
 }
 
@@ -254,6 +276,22 @@ PresetData createPresetFromCurrent(const char* name) {
     p.unisonVoices = synth.getUnisonVoices();
     p.unisonDetune = (uint8_t)synth.getUnisonDetune();
     p.waveMorph = (uint8_t)(synth.getVoice(0).getOsc(0).getMorph() * 100.0f);
+
+    p.osc1PW = (uint8_t)(synth.getVoice(0).getOsc(0).getPulseWidth() * 100.0f);
+    p.osc2PW = (uint8_t)(synth.getVoice(0).getOsc(1).getPulseWidth() * 100.0f);
+
+    // Mod Matrix
+    for (int i = 0; i < 8; i++) {
+        ModSlot& slot = synth.getModMatrix().getSlot(i);
+        p.modSrcDest[i] = (static_cast<uint8_t>(slot.source) << 4) | static_cast<uint8_t>(slot.destination);
+        p.modAmount[i] = (int16_t)(slot.amount * 1000.0f);
+    }
+
+    // SD Waves (This is tricky because we only have indices in DisplayManager state)
+    // For now we'll assume the current selection in UI is what's being saved,
+    // but better would be to track what's actually LOADED in the voices.
+    p.waveSlotA = synth.getLoadedWaveIndex(0);
+    p.waveSlotB = synth.getLoadedWaveIndex(1);
 
     p.effectFlags = (satEnabled ? 1 : 0) | (chorusEnabled ? 2 : 0) | (delayEnabled ? 4 : 0);
     
@@ -446,6 +484,9 @@ void printHelp() {
     Serial.println("  P<0-15>    Load internal preset");
     Serial.println("  PS<0-15>   Save to internal slot");
     Serial.println("  PF         Load factory presets");
+    Serial.println("");
+    Serial.println("-- Navigation --");
+    Serial.println("  Pages: MAIN -> OSC -> FILTER -> ENVELOPES -> LFO -> MOD -> ARP -> EFFECTS -> MIXER -> SD");
     Serial.println("");
     Serial.println("-- Other --");
     Serial.println("  gl<ms>     Glide time");

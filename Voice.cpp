@@ -20,6 +20,7 @@ Voice::Voice() :
     filterKeyTracking_(0.5f),
     globalFilterMod_(0.0f),
     globalPitchMod_(0.0f),
+    voicePitchOffset_(0.0f),
     targetFreq_(440.0f),
     pan_(0.0f)
 {
@@ -257,6 +258,9 @@ void Voice::updateBlockParams() {
     // Apply frequency and global modulations once per block
     osc_[0].setFrequency(freq);
     osc_[1].setFrequency(freq);
-    osc_[0].setPitchMod(globalPitchMod_);
-    osc_[1].setPitchMod(globalPitchMod_);
+
+    // Combine per-voice offset (unison) with global modulation (LFO)
+    float totalPitchMod = voicePitchOffset_ + globalPitchMod_;
+    osc_[0].setPitchMod(totalPitchMod);
+    osc_[1].setPitchMod(totalPitchMod);
 }

@@ -54,6 +54,7 @@ SynthEngine::SynthEngine() :
     modMatrix_.setSlot(0, ModSource::LFO1, ModDest::FILTER_CUTOFF, 0.5f);
 
     for (int i = 0; i < NUM_VOICES; i++) voiceNotes_[i] = 255;
+    currentWaveIdx_[0] = currentWaveIdx_[1] = 255;
 }
 
 bool SynthEngine::init() {
@@ -214,7 +215,7 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
         if (voicesToAllocate > 1) {
             detune = unisonDetune_ * ((float)v / (voicesToAllocate - 1) - 0.5f) * 2.0f;
         }
-        voice.setGlobalPitchMod(detune / 100.0f); // Use pitch mod for unison detune
+        voice.setVoicePitchOffset(detune / 100.0f); // Use per-voice offset for unison detune
 
         // Panning spread
         float spread = -0.8f + (1.6f * v / (max(1, voicesToAllocate - 1)));
@@ -278,6 +279,13 @@ void SynthEngine::loadWavetableForOsc(int osc, int slot, const char* filename) {
     if (table) {
         for (int i = 0; i < NUM_VOICES; i++) {
             voices_[i].setOscCustomTable(osc, slot, table, size);
+        }
+        // Save index for preset saving
+        for (int i = 0; i < wtManager_.getWaveFileCount(); i++) {
+            if (strcmp(wtManager_.getWaveFileName(i), filename) == 0) {
+                currentWaveIdx_[slot] = i;
+                break;
+            }
         }
     }
 }

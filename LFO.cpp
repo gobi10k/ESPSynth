@@ -2,6 +2,8 @@
 #include "Wavetables.h"
 #include <math.h>
 
+const char* LFO_WAVEFORM_NAMES[] = {"SIN", "TRI", "SAW^", "SAWv", "SQR", "S&H"};
+
 LFO::LFO() :
     frequency_(1.0f),
     waveform_(LFOWaveform::SINE),
