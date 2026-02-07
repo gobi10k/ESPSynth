@@ -25,6 +25,8 @@ SynthEngine::SynthEngine() :
     pendingParams_.oscDetune[1] = 7.0f;
     pendingParams_.oscCoarse[0] = 0;
     pendingParams_.oscCoarse[1] = 0;
+    pendingParams_.oscSupersawDetune[0] = 0.5f;
+    pendingParams_.oscSupersawDetune[1] = 0.5f;
     pendingParams_.oscMix = 0.5f;
     pendingParams_.pulseWidth[0] = 0.5f;
     pendingParams_.pulseWidth[1] = 0.5f;
@@ -42,6 +44,7 @@ SynthEngine::SynthEngine() :
     pendingParams_.ampA = 0.01f; pendingParams_.ampD = 0.1f; pendingParams_.ampS = 0.7f; pendingParams_.ampR = 0.3f;
     pendingParams_.fltA = 0.01f; pendingParams_.fltD = 0.2f; pendingParams_.fltS = 0.3f; pendingParams_.fltR = 0.5f;
     pendingParams_.glideTime = 0.0f;
+    pendingParams_.legato = false;
 
     activeParams_ = pendingParams_;
     paramsDirty_ = true;
@@ -192,6 +195,7 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
 }
 
 void SynthEngine::noteOnInternal(uint8_t note, uint8_t velocity) {
+    bool existingActive = (getActiveVoiceCount() > 0);
     int voice = allocateVoice(note);
     if (voice < 0) return;
     
@@ -205,7 +209,8 @@ void SynthEngine::noteOnInternal(uint8_t note, uint8_t velocity) {
         resonator_.setFrequency(midiToFreq(note));
     }
 
-    voices_[voice].noteOn(note, velocity);
+    bool shouldGlide = activeParams_.legato ? existingActive : (activeParams_.glideTime > 0.0f);
+    voices_[voice].noteOn(note, velocity, shouldGlide);
 }
 
 void SynthEngine::noteOff(uint8_t note) {
@@ -266,6 +271,13 @@ void SynthEngine::setPitchBendRange(uint8_t semitones) {
 void SynthEngine::setOscWaveform(int osc, Waveform wf) {
     if (osc >= 0 && osc < 2) {
         pendingParams_.oscWaveforms[osc] = wf;
+        paramsDirty_ = true;
+    }
+}
+
+void SynthEngine::setOscSupersawDetune(int osc, float d) {
+    if (osc >= 0 && osc < 2) {
+        pendingParams_.oscSupersawDetune[osc] = d;
         paramsDirty_ = true;
     }
 }
@@ -369,6 +381,11 @@ void SynthEngine::setGlideTime(float ms) {
     paramsDirty_ = true;
 }
 
+void SynthEngine::setLegato(bool legato) {
+    pendingParams_.legato = legato;
+    paramsDirty_ = true;
+}
+
 LFO& SynthEngine::getLFO(int index) {
     return lfos_[index % NUM_LFOS];
 }
@@ -447,6 +464,7 @@ void SynthEngine::processBlock() {
         }
         if (triggered) {
             noteOnInternal(euclideanNote_, vel);
+            if (midiNoteOnCb_) midiNoteOnCb_(1, euclideanNote_, vel);
         }
     }
 
@@ -455,6 +473,7 @@ void SynthEngine::processBlock() {
         bool triggered = false;
         uint8_t aNote = 0, aVel = 0;
         bool gateOff = false;
+        uint8_t offNote = 0;
         for (int s = 0; s < DMA_BUFFER_SAMPLES; s++) {
             if (arp_.process()) {
                 triggered = true;
@@ -463,16 +482,21 @@ void SynthEngine::processBlock() {
             }
             if (lastArpGate_ && !arp_.isGateOn()) {
                 gateOff = true;
+                offNote = arp_.getCurrentNote();
             }
             lastArpGate_ = arp_.isGateOn();
         }
 
         if (triggered) {
             noteOnInternal(aNote, aVel);
+            if (midiNoteOnCb_) midiNoteOnCb_(1, aNote, aVel);
         }
         if (gateOff) {
             for (int v = 0; v < NUM_VOICES; v++) {
-                if (voices_[v].isActive()) voices_[v].noteOff();
+                if (voices_[v].isActive()) {
+                    voices_[v].noteOff();
+                    if (midiNoteOffCb_) midiNoteOffCb_(1, voices_[v].getNote());
+                }
             }
         }
     }

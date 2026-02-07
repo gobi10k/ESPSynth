@@ -168,6 +168,39 @@ PresetData PresetManager::getInitPreset() {
     p.filterType = (uint8_t)VoiceFilterType::SVF;
     p.synthMode = (uint8_t)VoiceSynthMode::STANDARD;
     p.fmAmount = 10; // 1.0
+    p.osc1Coarse = 0;
+    p.osc2Coarse = 0;
+    p.osc1SupersawDetune = 50;
+    p.osc2SupersawDetune = 50;
+    p.legato = 0;
+
+    p.revDecay = 15;
+    p.revSize = 50;
+    p.revDamp = 50;
+    p.revMix = 30;
+    p.revPre = 10;
+
+    p.compThresh = -12;
+    p.compRatio = 40;
+    p.compAttack = 10;
+    p.compRelease = 10;
+    p.compMakeup = 0;
+
+    p.resProfile = 0;
+    p.resReso = 10;
+    p.resDamp = 30;
+    p.resBright = 80;
+    p.resMix = 50;
+
+    p.combPitch = 440;
+    p.combFB = 70;
+    p.combDamp = 30;
+    p.combMix = 50;
+
+    p.granDensity = 10;
+    p.granDuration = 30;
+    p.granMix = 0;
+    p.granSource = 0;
 
     return p;
 }

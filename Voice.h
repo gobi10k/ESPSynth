@@ -36,6 +36,7 @@ struct GlobalVoiceParams {
     Waveform oscWaveforms[2];
     float oscDetune[2];
     int8_t oscCoarse[2];
+    float oscSupersawDetune[2];
     float oscMix;
     float pulseWidth[2];
     float morph[2];
@@ -53,13 +54,14 @@ struct GlobalVoiceParams {
     float ampA, ampD, ampS, ampR;
     float fltA, fltD, fltS, fltR;
     float glideTime;
+    bool legato;
 };
 
 class Voice {
 public:
     Voice();
     
-    void noteOn(uint8_t note, uint8_t velocity);
+    void noteOn(uint8_t note, uint8_t velocity, bool glide = false);
     void noteOff();
     void forceOff();
     

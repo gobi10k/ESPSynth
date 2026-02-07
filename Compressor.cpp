@@ -36,18 +36,18 @@ void Compressor::setRatio(float ratio) {
 }
 
 void Compressor::setAttack(float ms) {
-    ms = constrain(ms, 0.1f, 100.0f);
-    attackCoef_ = expf(-1.0f / (ms * 0.001f * SAMPLE_RATE));
+    attackMs_ = constrain(ms, 0.1f, 100.0f);
+    attackCoef_ = expf(-1.0f / (attackMs_ * 0.001f * SAMPLE_RATE));
 }
 
 void Compressor::setRelease(float ms) {
-    ms = constrain(ms, 10.0f, 1000.0f);
-    releaseCoef_ = expf(-1.0f / (ms * 0.001f * SAMPLE_RATE));
+    releaseMs_ = constrain(ms, 10.0f, 1000.0f);
+    releaseCoef_ = expf(-1.0f / (releaseMs_ * 0.001f * SAMPLE_RATE));
 }
 
 void Compressor::setMakeupGain(float dB) {
-    dB = constrain(dB, 0.0f, 24.0f);
-    makeupGain_ = powf(10.0f, dB / 20.0f);
+    makeupGainDb_ = constrain(dB, 0.0f, 24.0f);
+    makeupGain_ = powf(10.0f, makeupGainDb_ / 20.0f);
 }
 
 void Compressor::setKnee(float dB) {

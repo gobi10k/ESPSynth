@@ -98,6 +98,7 @@ public:
     void setOscWaveform(int osc, Waveform wf);
     void setOscDetune(int osc, float cents);
     void setOscCoarse(int osc, int8_t semitones);
+    void setOscSupersawDetune(int osc, float d);
     void setOscMix(float mix);
     void setPulseWidth(int osc, float pw);
     void setOscMorph(int osc, float morph);
@@ -136,7 +137,13 @@ public:
     
     // Glide
     void setGlideTime(float ms);
-    
+    float getGlideTime() const { return pendingParams_.glideTime; }
+    void setLegato(bool legato);
+    bool getLegato() const { return pendingParams_.legato; }
+    int8_t getOscCoarse(int osc) const { return pendingParams_.oscCoarse[osc]; }
+    float getOscSupersawDetune(int osc) const { return pendingParams_.oscSupersawDetune[osc]; }
+    float getPulseWidth(int osc) const { return pendingParams_.pulseWidth[osc]; }
+
     // LFOs
     LFO& getLFO(int index);
     static constexpr int NUM_LFOS = 2;
@@ -167,6 +174,7 @@ public:
     void setGranularEnabled(bool en) { granularEnabled_ = en; }
     bool isGranularEnabled() const { return granularEnabled_; }
     void setGranularMix(float mix);
+    float getGranularMix() const { return granularMix_; }
     
     // Effects
     EffectsChain& getEffects() { return effects_; }
@@ -195,6 +203,12 @@ public:
     }
 
     void setEuclideanNote(uint8_t note) { euclideanNote_ = note; }
+
+    // MIDI Output callback
+    void setMIDIOUTCallback(NoteOnCallback on, NoteOffCallback off) {
+        midiNoteOnCb_ = on;
+        midiNoteOffCb_ = off;
+    }
 
 private:
     void processBlock();
@@ -257,6 +271,10 @@ private:
     i2s_chan_handle_t tx_handle_;
     AudioProfiler profiler_;
     int16_t blockBuffer_[DMA_BUFFER_SAMPLES * 2];
+
+    // MIDI Output
+    NoteOnCallback midiNoteOnCb_;
+    NoteOffCallback midiNoteOffCb_;
 
     // Thread-safe parameters
     GlobalVoiceParams activeParams_;

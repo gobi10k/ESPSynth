@@ -11,7 +11,8 @@ FDNReverb::FDNReverb() :
     roomSize_(0.5f),
     damping_(0.5f),
     mix_(0.3f),
-    enabled_(false)
+    enabled_(false),
+    frozen_(false)
 {
     reset();
     
@@ -126,7 +127,8 @@ void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
     preDelayPos_++;
     if (preDelayPos_ >= PREDELAY_MAX) preDelayPos_ = 0;
     
-    float preDelayedF = preDelayed / 32000.0f;
+    float preDelayedF = frozen_ ? 0.0f : (preDelayed / 32000.0f);
+    float currentFeedback = frozen_ ? 0.999f : feedbackGain_;
     
     // Read from delay lines and apply damping - Unrolled
     float outputs[4];
@@ -166,22 +168,22 @@ void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
     float ig = 0.25f;
     float tw;
 
-    tw = m0 * feedbackGain_ + preDelayedF * ig;
+    tw = m0 * currentFeedback + preDelayedF * ig;
     if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
     delayLines_[0][writePos_[0]] = (int16_t)(tw * 32000.0f);
     if (++writePos_[0] >= FDN_MAX_DELAY) writePos_[0] = 0;
 
-    tw = m1 * feedbackGain_ + preDelayedF * ig;
+    tw = m1 * currentFeedback + preDelayedF * ig;
     if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
     delayLines_[1][writePos_[1]] = (int16_t)(tw * 32000.0f);
     if (++writePos_[1] >= FDN_MAX_DELAY) writePos_[1] = 0;
 
-    tw = m2 * feedbackGain_ + preDelayedF * ig;
+    tw = m2 * currentFeedback + preDelayedF * ig;
     if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
     delayLines_[2][writePos_[2]] = (int16_t)(tw * 32000.0f);
     if (++writePos_[2] >= FDN_MAX_DELAY) writePos_[2] = 0;
 
-    tw = m3 * feedbackGain_ + preDelayedF * ig;
+    tw = m3 * currentFeedback + preDelayedF * ig;
     if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
     delayLines_[3][writePos_[3]] = (int16_t)(tw * 32000.0f);
     if (++writePos_[3] >= FDN_MAX_DELAY) writePos_[3] = 0;

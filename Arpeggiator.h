@@ -73,7 +73,7 @@ private:
     uint8_t sortedVelocities_[ARP_MAX_NOTES];
     
     // Playback state
-    int8_t stepIndex_;
+    int16_t stepIndex_;
     int8_t direction_;  // 1 or -1
     uint8_t currentOctave_;
     uint8_t currentNote_;

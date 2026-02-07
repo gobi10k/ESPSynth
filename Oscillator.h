@@ -15,6 +15,7 @@ public:
     void setAmplitude(float amp);
     void setDetune(float cents);      // Detune in cents (-100 to +100)
     void setCoarse(int8_t semitones); // Coarse tune in semitones
+    void setSupersawDetune(float d);  // 0.0 to 1.0 scaling
     void setPulseWidth(float pw);     // 0.1 to 0.9 for pulse wave
     
     float getFrequency() const { return frequency_; }
@@ -127,6 +128,7 @@ private:
     float detuneMultiplier_;
     int8_t coarseTune_;
     float coarseMultiplier_;
+    float supersawDetune_;
     float pulseWidth_;
     float morph_;
     

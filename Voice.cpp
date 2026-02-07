@@ -47,7 +47,7 @@ float Voice::midiToFreq(uint8_t note) {
     return 440.0f * powf(2.0f, (note - 69) / 12.0f);
 }
 
-void Voice::noteOn(uint8_t note, uint8_t velocity) {
+void Voice::noteOn(uint8_t note, uint8_t velocity, bool glide) {
     note_ = note;
     velocity_ = velocity;
     velScalar_ = velocity / 127.0f;
@@ -58,10 +58,10 @@ void Voice::noteOn(uint8_t note, uint8_t velocity) {
     svf_.setKeyFreq(targetFreq_);
     ladder_.setKeyFreq(targetFreq_);
     
-    if (pitchSmooth_.getCurrent() == 0.0f) {
-        pitchSmooth_.setImmediate(targetFreq_);
-    } else {
+    if (glide || pitchSmooth_.getCurrent() == 0.0f) {
         pitchSmooth_.setTarget(targetFreq_);
+    } else {
+        pitchSmooth_.setImmediate(targetFreq_);
     }
     
     ampEnv_.gate(true);
@@ -257,6 +257,8 @@ void Voice::applyParams(const GlobalVoiceParams& p) {
     setOscDetune(1, p.oscDetune[1]);
     osc_[0].setCoarse(p.oscCoarse[0]);
     osc_[1].setCoarse(p.oscCoarse[1]);
+    osc_[0].setSupersawDetune(p.oscSupersawDetune[0]);
+    osc_[1].setSupersawDetune(p.oscSupersawDetune[1]);
     setOscMix(p.oscMix);
     osc_[0].setPulseWidth(p.pulseWidth[0]);
     osc_[1].setPulseWidth(p.pulseWidth[1]);

@@ -39,6 +39,8 @@ public:
     
     float getPitch() const;
     float getFeedback() const { return feedback_; }
+    float getDamping() const { return damping_; }
+    float getMix() const { return mix_; }
     CombMode getMode() const { return mode_; }
     
     float process(float input);

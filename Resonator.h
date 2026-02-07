@@ -53,7 +53,11 @@ public:
     
     float getFrequency() const { return fundamental_; }
     ResonatorProfile getProfile() const { return profile_; }
-    
+    float getResonance() const { return resonance_; }
+    float getDamping() const { return damping_; }
+    float getBrightness() const { return brightness_; }
+    float getMix() const { return mix_; }
+
     // Process audio
     float process(float input);
     
