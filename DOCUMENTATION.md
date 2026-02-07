@@ -98,7 +98,7 @@ The SD card system is critical for long-term preset storage. If initialization f
 - **Directory Structure:** The synth expects a `/presets/` directory at the root of the card.
 - **File Format:** Presets are stored as binary files with the `.sy` extension.
 - **Auto-Initialization:** On first successful boot with a blank SD card, the synth will automatically:
-  1. Create a `welcome.txt` file.
+  1. Create a `/welcome.txt` file.
   2. Create the `/presets/` directory.
   3. Generate 3 initial test presets.
 
