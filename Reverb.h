@@ -58,6 +58,11 @@ private:
     float damping_;
     float mix_;
     
+    // Diffusion
+    int16_t diffBuf1_[256];
+    int16_t diffBuf2_[256];
+    uint16_t diffPos1_, diffPos2_;
+
     bool enabled_;
 };
 

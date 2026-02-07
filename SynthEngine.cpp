@@ -119,7 +119,7 @@ void SynthEngine::start() {
         "SynthTask",
         20480,  // Further increased stack size to 20KB
         this,
-        configMAX_PRIORITIES - 3, // Slightly lower than max to prevent core starvation
+        configMAX_PRIORITIES - 1, // Highest priority on Core 1
         &audioTaskHandle_,
         1
     );
@@ -381,6 +381,15 @@ void SynthEngine::setMasterVolume(float vol) {
     masterVolume_.setTarget(constrain(vol, 0.0f, 1.0f));
 }
 
+void SynthEngine::setGlobalPan(float pan) {
+    globalPan_ = pan;
+    // Update all active voices
+    for (int i = 0; i < NUM_VOICES; i++) {
+        float spread = -0.7f + (1.4f * i / (NUM_VOICES - 1));
+        voices_[i].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
+    }
+}
+
 uint8_t SynthEngine::getActiveVoiceCount() const {
     uint8_t count = 0;
     for (int i = 0; i < NUM_VOICES; i++) {
@@ -423,85 +432,76 @@ void SynthEngine::processBlock() {
             voices_[v].setGlobalOsc1PWMod(pw1Mod);
             voices_[v].setGlobalOsc2PWMod(pw2Mod);
             voices_[v].updateBlockParams();
-
-            // Pre-calculate panning coefficients
-            float pan = voices_[v].getPan();
-            float panAngle = (pan + 1.0f) * 0.785398f;
-            voicePanL_[v] = cosf(panAngle);
-            voicePanR_[v] = sinf(panAngle);
         }
     }
-    // --------------------------------------------------
-    
-    for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
-        // Euclidean
-        if (euclideanEnabled_) {
+
+    // Euclidean
+    if (euclideanEnabled_) {
+        bool triggered = false;
+        uint8_t vel = 0;
+        for (int s = 0; s < DMA_BUFFER_SAMPLES; s++) {
             if (euclideanSeq_.process()) {
-                noteOnInternal(euclideanNote_, euclideanSeq_.getVelocity());
+                triggered = true;
+                vel = euclideanSeq_.getVelocity();
             }
         }
+        if (triggered) {
+            noteOnInternal(euclideanNote_, vel);
+        }
+    }
 
-        // Process arpeggiator (only if mode is not OFF and we have notes)
-        if (arp_.getMode() != ArpMode::OFF) {
+    // Arpeggiator
+    if (arp_.getMode() != ArpMode::OFF) {
+        bool triggered = false;
+        uint8_t aNote = 0, aVel = 0;
+        bool gateOff = false;
+        for (int s = 0; s < DMA_BUFFER_SAMPLES; s++) {
             if (arp_.process()) {
-                if (lastArpGate_) {
-                    for (int v = 0; v < NUM_VOICES; v++) {
-                        voices_[v].noteOff();
-                    }
-                }
-                
-                int voice = allocateVoice(arp_.getCurrentNote());
-                if (voice >= 0 && voice < NUM_VOICES) {
-                    voices_[voice].applyParams(activeParams_);
-
-                    // Combine spread and global pan
-                    float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
-                    voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
-
-                    currentVelocity_ = arp_.getCurrentVelocity() / 127.0f;
-
-                    if (resonatorEnabled_) {
-                        resonator_.setFrequency(midiToFreq(arp_.getCurrentNote()));
-                    }
-
-                    voices_[voice].noteOn(arp_.getCurrentNote(), arp_.getCurrentVelocity());
-                }
+                triggered = true;
+                aNote = arp_.getCurrentNote();
+                aVel = arp_.getCurrentVelocity();
             }
-            
-            // Handle arp gate off
             if (lastArpGate_ && !arp_.isGateOn()) {
-                for (int v = 0; v < NUM_VOICES; v++) {
-                    if (voices_[v].isActive()) {
-                        voices_[v].noteOff();
-                    }
-                }
+                gateOff = true;
             }
             lastArpGate_ = arp_.isGateOn();
         }
-        
+
+        if (triggered) {
+            noteOnInternal(aNote, aVel);
+        }
+        if (gateOff) {
+            for (int v = 0; v < NUM_VOICES; v++) {
+                if (voices_[v].isActive()) voices_[v].noteOff();
+            }
+        }
+    }
+    // --------------------------------------------------
+
+    for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
         // Mix all voices with panning - unrolled for 4 voices
         float left = 0.0f;
         float right = 0.0f;
 
         if (voices_[0].isActive()) {
             float s = voices_[0].process();
-            left += s * voicePanL_[0];
-            right += s * voicePanR_[0];
+            left += s * voices_[0].getPanL();
+            right += s * voices_[0].getPanR();
         }
         if (voices_[1].isActive()) {
             float s = voices_[1].process();
-            left += s * voicePanL_[1];
-            right += s * voicePanR_[1];
+            left += s * voices_[1].getPanL();
+            right += s * voices_[1].getPanR();
         }
         if (voices_[2].isActive()) {
             float s = voices_[2].process();
-            left += s * voicePanL_[2];
-            right += s * voicePanR_[2];
+            left += s * voices_[2].getPanL();
+            right += s * voices_[2].getPanR();
         }
         if (voices_[3].isActive()) {
             float s = voices_[3].process();
-            left += s * voicePanL_[3];
-            right += s * voicePanR_[3];
+            left += s * voices_[3].getPanL();
+            right += s * voices_[3].getPanR();
         }
         
         // Scale down for mixing (1.0 / sqrt(NUM_VOICES))
@@ -515,18 +515,20 @@ void SynthEngine::processBlock() {
             right = right * (1.0f - granularMix_) + gran * granularMix_ * 0.7f;
         }
 
-        // Apply Resonator and Comb (if enabled) - Currently Mono
+        // Apply Resonator and Comb (if enabled) - Currently Mono input, stereo add
         if (resonatorEnabled_) {
             float mono = (left + right) * 0.5f;
-            float res = resonator_.process(mono);
-            left = left * 0.5f + res * 0.5f;
-            right = right * 0.5f + res * 0.5f;
+            float mixed = resonator_.process(mono);
+            float diff = mixed - mono;
+            left += diff;
+            right += diff;
         }
         if (combEnabled_) {
             float mono = (left + right) * 0.5f;
-            float cb = comb_.process(mono);
-            left = left * 0.5f + cb * 0.5f;
-            right = right * 0.5f + cb * 0.5f;
+            float mixed = comb_.process(mono);
+            float diff = mixed - mono;
+            left += diff;
+            right += diff;
         }
 
         if (isnan(left) || isinf(left)) left = 0.0f;

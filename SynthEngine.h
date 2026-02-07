@@ -178,7 +178,7 @@ public:
     // Master
     void setMasterVolume(float vol);
     float getMasterVolume() const { return masterVolume_.getTarget(); }
-    void setGlobalPan(float pan) { globalPan_ = pan; }
+    void setGlobalPan(float pan);
     float getGlobalPan() const { return globalPan_; }
     
     // Profiler
@@ -253,8 +253,6 @@ private:
     bool sustainPedalActive_ = false;
     bool notesSustained_[128] = {false};
     volatile uint32_t blockCounter_ = 0;
-    float voicePanL_[NUM_VOICES];
-    float voicePanR_[NUM_VOICES];
     TaskHandle_t audioTaskHandle_;
     i2s_chan_handle_t tx_handle_;
     AudioProfiler profiler_;

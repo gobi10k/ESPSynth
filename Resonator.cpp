@@ -1,4 +1,5 @@
 #include "Resonator.h"
+#include "MathUtils.h"
 #include <math.h>
 #include <string.h>
 
@@ -172,5 +173,8 @@ float ResonatorBank::process(float input) {
     resonated *= 0.4f;
     brightnessState_ += brightnessCoef_ * (resonated - brightnessState_);
     
-    return input + mix_ * (brightnessState_ - input);
+    // Output limiting to prevent explosion at high Q
+    float out = fastTanh(brightnessState_);
+
+    return input + mix_ * (out - input);
 }

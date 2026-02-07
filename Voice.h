@@ -75,8 +75,10 @@ public:
     float getFrequency() const { return targetFreq_; }
     
     // Panning
-    void setPan(float pan) { pan_ = pan; }
+    void setPan(float pan);
     float getPan() const { return pan_; }
+    float getPanL() const { return panL_; }
+    float getPanR() const { return panR_; }
 
     // Oscillators
     void setOscWaveform(int osc, Waveform wf);
@@ -154,6 +156,8 @@ private:
 
     // Panning
     float pan_;
+    float panL_;
+    float panR_;
 };
 
 #endif

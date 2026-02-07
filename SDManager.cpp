@@ -13,7 +13,10 @@ bool SDManager::begin(uint8_t csPin) {
     pinMode(SD_MISO_PIN, INPUT_PULLUP);
 
     // 2. Initialize dedicated SPI bus (VSPI)
-    if (spiBus_) delete spiBus_;
+    if (spiBus_) {
+        SD.end();
+        delete spiBus_;
+    }
     spiBus_ = new SPIClass(VSPI);
     spiBus_->begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, -1); // -1: Manual CS
 

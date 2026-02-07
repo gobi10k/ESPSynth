@@ -21,7 +21,9 @@ Voice::Voice() :
     globalFilterMod_(0.0f),
     globalPitchMod_(0.0f),
     targetFreq_(440.0f),
-    pan_(0.0f)
+    pan_(0.0f),
+    panL_(0.707f),
+    panR_(0.707f)
 {
     osc_[0].setWaveform(Waveform::SAW);
     osc_[0].setAmplitude(1.0f);
@@ -126,8 +128,8 @@ float Voice::process() {
 
     float sample = oscOutput;
 
-    // Update filter envelope and coefficients every 8 samples for performance
-    if ((age_ & 0x07) == 0) {
+    // Update filter envelope and coefficients every 4 samples for performance
+    if ((age_ & 0x03) == 0) {
         float filterEnvVal = filterEnv_.process();
 
         // Apply velocity scaling to filter envelope amount
@@ -233,6 +235,15 @@ void Voice::setAmpADSR(float a, float d, float s, float r) {
 
 void Voice::setFilterADSR(float a, float d, float s, float r) {
     filterEnv_.setADSR(a, d, s, r);
+}
+
+void Voice::setPan(float pan) {
+    pan = constrain(pan, -1.0f, 1.0f);
+    if (pan == pan_) return;
+    pan_ = pan;
+    float panAngle = (pan + 1.0f) * 0.785398f;
+    panL_ = cosf(panAngle);
+    panR_ = sinf(panAngle);
 }
 
 void Voice::setGlideTime(float ms) {

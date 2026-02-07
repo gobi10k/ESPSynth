@@ -20,6 +20,7 @@ FDNReverb::FDNReverb() :
         dampState_[i] = 0.0f;
     }
     
+    diffPos1_ = diffPos2_ = 0;
     updateDecayCoefficients();
 }
 
@@ -30,6 +31,9 @@ void FDNReverb::reset() {
     }
     memset(preDelayBuffer_, 0, sizeof(preDelayBuffer_));
     preDelayPos_ = 0;
+    memset(diffBuf1_, 0, sizeof(diffBuf1_));
+    memset(diffBuf2_, 0, sizeof(diffBuf2_));
+    diffPos1_ = diffPos2_ = 0;
 }
 
 void FDNReverb::setDecay(float seconds) {
@@ -95,6 +99,20 @@ void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
     if (isnan(inR) || isinf(inR)) inR = 0.0f;
 
     float monoInput = (inL + inR) * 0.5f;
+
+    // Input Diffusion
+    auto diffuse = [](float input, int16_t* buf, uint16_t& pos, int len, float coeff) {
+        int readPos = (int)pos - len;
+        if (readPos < 0) readPos += 256;
+        float delayed = buf[readPos] / 32000.0f;
+        float output = -coeff * input + delayed;
+        buf[pos] = (int16_t)(constrain(input + coeff * output, -1.0f, 1.0f) * 32000.0f);
+        pos = (pos + 1) % 256;
+        return output;
+    };
+
+    monoInput = diffuse(monoInput, diffBuf1_, diffPos1_, 113, 0.6f);
+    monoInput = diffuse(monoInput, diffBuf2_, diffPos2_, 199, 0.6f);
 
     // Pre-delay using safe index math
     int preReadPos = (int)preDelayPos_ - (int)preDelayTime_;

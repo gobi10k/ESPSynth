@@ -20,9 +20,9 @@ Delay::Delay() :
 
 void Delay::setTime(float seconds) {
     delayTime_ = constrain(seconds, 0.001f, 0.25f);  // Max 250ms
-    delaySamples_ = (uint16_t)(delayTime_ * SAMPLE_RATE);
-    if (delaySamples_ >= MAX_DELAY_SAMPLES) {
-        delaySamples_ = MAX_DELAY_SAMPLES - 1;
+    delaySamples_ = delayTime_ * SAMPLE_RATE;
+    if (delaySamples_ >= MAX_DELAY_SAMPLES - 1.0f) {
+        delaySamples_ = (float)MAX_DELAY_SAMPLES - 2.0f;
     }
 }
 
@@ -51,11 +51,16 @@ void Delay::processStereo(float& left, float& right) {
     if (isnan(left) || isinf(left)) left = 0.0f;
     if (isnan(right) || isinf(right)) right = 0.0f;
 
-    int readPos = (int)writePos_ - (int)delaySamples_;
-    if (readPos < 0) readPos += MAX_DELAY_SAMPLES;
+    // Read with linear interpolation
+    float readPosF = (float)writePos_ - delaySamples_;
+    if (readPosF < 0) readPosF += MAX_DELAY_SAMPLES;
     
-    float delayedL = bufferL_[readPos] / 32767.0f;
-    float delayedR = bufferR_[readPos] / 32767.0f;
+    int rp0 = (int)readPosF;
+    int rp1 = (rp0 + 1) % MAX_DELAY_SAMPLES;
+    float frac = readPosF - (float)rp0;
+
+    float delayedL = (bufferL_[rp0] * (1.0f - frac) + bufferL_[rp1] * frac) / 32767.0f;
+    float delayedR = (bufferR_[rp0] * (1.0f - frac) + bufferR_[rp1] * frac) / 32767.0f;
 
     float toWriteL = left + delayedL * feedback_;
     float toWriteR = right + delayedR * feedback_;

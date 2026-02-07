@@ -40,6 +40,15 @@ inline float fastTanh(float x) {
 }
 
 /**
+ * Polynomial soft clipper (x - x^3/3)
+ */
+inline float fastPolyClip(float x) {
+    if (x > 1.0f) return 0.666666667f;
+    if (x < -1.0f) return -0.666666667f;
+    return x - (x * x * x) * 0.333333333f;
+}
+
+/**
  * Fast log2 approximation
  */
 inline float fastLog2(float x) {

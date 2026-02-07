@@ -30,7 +30,7 @@ private:
     int16_t bufferL_[MAX_DELAY_SAMPLES];  // 16-bit saves 50% memory
     int16_t bufferR_[MAX_DELAY_SAMPLES];
     uint16_t writePos_;
-    uint16_t delaySamples_;
+    float delaySamples_;
     
     float delayTime_;
     float feedback_;
