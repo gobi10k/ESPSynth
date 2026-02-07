@@ -16,9 +16,13 @@ public:
     void setDetune(float cents);      // Detune in cents (-100 to +100)
     void setPulseWidth(float pw);     // 0.1 to 0.9 for pulse wave
     void setMorph(float morph) { morph_ = morph; }
-    void setCustomTable(float* table, uint16_t size) {
-        customTable_ = table;
-        customTableSize_ = size;
+    void setCustomTable(int slot, float* table, uint16_t size) {
+        if (slot == 0) {
+            customTable_ = table;
+            customTableSize_ = size;
+        } else {
+            customTableB_ = table;
+        }
     }
     
     float getFrequency() const { return frequency_; }
@@ -50,7 +54,7 @@ public:
             case Waveform::NOISE:    sample = generateNoise(); break;
             case Waveform::RAMP_DOWN: sample = Wavetables::readRampDown(phase_, tableIndex_); break;
             case Waveform::MORPH:    sample = Wavetables::readMorph(phase_, morph_, tableIndex_); break;
-            case Waveform::SD_TABLE: sample = Wavetables::readCustom(phase_, customTable_, customTableSize_); break;
+            case Waveform::SD_TABLE: sample = Wavetables::readCustomMorph(phase_, customTable_, customTableB_, morph_, customTableSize_); break;
             default: sample = 0.0f;
         }
         phase_ += effectiveIncrement_;
@@ -81,7 +85,7 @@ public:
             case Waveform::NOISE:    sample = generateNoise(); break;
             case Waveform::RAMP_DOWN: sample = Wavetables::readRampDown(phase_, tableIndex_); break;
             case Waveform::MORPH:    sample = Wavetables::readMorph(phase_, morph_, tableIndex_); break;
-            case Waveform::SD_TABLE: sample = Wavetables::readCustom(phase_, customTable_, customTableSize_); break;
+            case Waveform::SD_TABLE: sample = Wavetables::readCustomMorph(phase_, customTable_, customTableB_, morph_, customTableSize_); break;
             default: sample = Wavetables::readSine(phase_);
         }
         phase_ += effInc;
@@ -145,6 +149,7 @@ private:
     // Morph and Custom
     float morph_;
     float* customTable_;
+    float* customTableB_;
     uint16_t customTableSize_;
 };
 

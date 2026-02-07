@@ -110,7 +110,11 @@ namespace Wavetables {
     inline float readCustom(uint32_t phase, float* table, uint16_t size) {
         if (!table) return 0.0f;
         uint16_t mask = size - 1;
-        uint8_t bits = (uint8_t)log2(size);
+        // Fast log2 for common powers of 2
+        uint8_t bits = 11; // Default for 2048
+        if (size == 1024) bits = 10;
+        else if (size == 4096) bits = 12;
+        else if (size != 2048) bits = (uint8_t)log2(size);
 
         uint32_t tablePos = phase >> (PHASE_BITS - bits);
         uint32_t fracBits = (phase >> (PHASE_BITS - bits - 16)) & 0xFFFF;
@@ -119,6 +123,14 @@ namespace Wavetables {
         float frac = fracBits * (1.0f / 65536.0f);
 
         return lerp(table[idx0], table[idx1], frac);
+    }
+
+    inline float readCustomMorph(uint32_t phase, float* tableA, float* tableB, float morph, uint16_t size) {
+        if (!tableA) return 0.0f;
+        if (!tableB || morph <= 0.0f) return readCustom(phase, tableA, size);
+        if (morph >= 1.0f) return readCustom(phase, tableB, size);
+
+        return lerp(readCustom(phase, tableA, size), readCustom(phase, tableB, size), morph);
     }
 
 }

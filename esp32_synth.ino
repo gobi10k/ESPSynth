@@ -87,6 +87,7 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
             break;
         case MIDI_CC::SUSTAIN_LEVEL:
             synth.setAmpADSR(-1, -1, val / 127.0f, -1);
+            synth.setFilterADSR(-1, -1, val / 127.0f, -1);
             break;
         case MIDI_CC::RELEASE:
             synth.setAmpADSR(-1, -1, -1, val * 0.02f);
@@ -1018,14 +1019,17 @@ void loop() {
 
     if (encVal.wasClicked()) {
         if (display.getCurrentPage() == DisplayPage::SD_BROWSER) {
+            display.setLoading(true);
+            display.update(); // Force refresh to show LOADING
+
             if (display.isWaveMode()) {
                 const char* name = synth.getWavetableManager().getWaveFileName(display.getSDFileIndex());
                 if (name) {
-                    synth.loadWavetableForOsc(0, name);
-                    Serial.printf("UI: Loaded Wave %s\n", name);
+                    synth.loadWavetableForOsc(0, display.getSDSlot(), name);
+                    Serial.printf("UI: Loaded Wave %s into slot %d\n", name, display.getSDSlot());
+                    delay(200); // Small delay to let user see "LOADING"
                 }
             } else {
-                // Preset loading logic (to be expanded)
                 int slot = display.getSDFileIndex();
                 PresetData p;
                 char filename[32];
@@ -1033,8 +1037,10 @@ void loop() {
                 if (presets.loadPresetFromSD(filename, p, sd)) {
                     applyPreset(p);
                     Serial.printf("UI: Loaded Preset %s\n", filename);
+                    delay(200);
                 }
             }
+            display.setLoading(false);
         } else {
             // Preview note
             synth.noteOn(60, 100);

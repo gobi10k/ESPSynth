@@ -59,7 +59,7 @@ public:
     // Oscillators
     void setOscWaveform(int osc, Waveform wf);
     void setOscDetune(int osc, float cents);
-    void setOscCustomTable(int osc, float* table, uint16_t size);
+    void setOscCustomTable(int osc, int slot, float* table, uint16_t size);
     void setOscMix(float mix);
     
     // Synth mode

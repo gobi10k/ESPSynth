@@ -175,9 +175,9 @@ void Voice::setOscDetune(int osc, float cents) {
     }
 }
 
-void Voice::setOscCustomTable(int osc, float* table, uint16_t size) {
+void Voice::setOscCustomTable(int osc, int slot, float* table, uint16_t size) {
     if (osc >= 0 && osc < 2) {
-        osc_[osc].setCustomTable(table, size);
+        osc_[osc].setCustomTable(slot, table, size);
     }
 }
 

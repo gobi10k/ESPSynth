@@ -271,13 +271,13 @@ void SynthEngine::setOscWaveform(int osc, Waveform wf) {
     }
 }
 
-void SynthEngine::loadWavetableForOsc(int osc, const char* filename) {
+void SynthEngine::loadWavetableForOsc(int osc, int slot, const char* filename) {
     if (osc < 0 || osc >= 2) return;
     uint16_t size;
     float* table = wtManager_.getWavetable(filename, size);
     if (table) {
         for (int i = 0; i < NUM_VOICES; i++) {
-            voices_[i].setOscCustomTable(osc, table, size);
+            voices_[i].setOscCustomTable(osc, slot, table, size);
         }
     }
 }

@@ -45,8 +45,10 @@ void WavetableManager::scanWaves() {
             waveFiles_[waveFileCount_][31] = '\0';
             waveFileCount_++;
         }
+        file.close();
         file = root.openNextFile();
     }
+    root.close();
 }
 
 const char* WavetableManager::getWaveFileName(int index) const {

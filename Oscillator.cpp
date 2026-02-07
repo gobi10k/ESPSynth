@@ -32,7 +32,8 @@ Oscillator::Oscillator() :
     lastPulse_(0.0f),
     morph_(0.0f),
     customTable_(nullptr),
-    customTableSize_(1024)
+    customTableB_(nullptr),
+    customTableSize_(2048)
 {
     for (int i = 0; i < 7; i++) {
         supersawPhases_[i] = (uint32_t)(rand());  // Random start phases

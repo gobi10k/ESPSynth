@@ -14,7 +14,9 @@ DisplayManager::DisplayManager() :
     currentPage_(DisplayPage::MAIN),
     selectedItem_(0),
     sdFileIndex_(0),
-    sdWaveMode_(false)
+    sdSlot_(0),
+    sdWaveMode_(false),
+    loadingFlag_(false)
 {
 }
 
@@ -95,7 +97,8 @@ void DisplayManager::nextItem() {
     else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
     else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
     else if (currentPage_ == DisplayPage::ENVELOPES) maxItems = 8;
-    else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 2;
+    else if (currentPage_ == DisplayPage::MIXER) maxItems = 5;
+    else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 3;
 
     if (selectedItem_ >= maxItems) selectedItem_ = 0;
 }
@@ -107,7 +110,8 @@ void DisplayManager::prevItem() {
     else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
     else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
     else if (currentPage_ == DisplayPage::ENVELOPES) maxItems = 8;
-    else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 2;
+    else if (currentPage_ == DisplayPage::MIXER) maxItems = 5;
+    else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 3;
 
     if (selectedItem_ < 0) selectedItem_ = maxItems - 1;
     if (selectedItem_ < 0) selectedItem_ = 0;
@@ -142,6 +146,16 @@ void DisplayManager::adjustValue(int delta) {
                     }
                     break;
                 }
+            }
+            break;
+
+        case DisplayPage::MIXER:
+            switch (selectedItem_) {
+                case 0: engine_->setMasterVolume(constrain(engine_->getMasterVolume() + delta * 0.05f, 0.0f, 1.0f)); break;
+                case 1: engine_->setGlobalPan(constrain(engine_->getGlobalPan() + delta * 0.1f, -1.0f, 1.0f)); break;
+                case 2: engine_->getReverb().setMix(constrain(engine_->getReverb().getMix() + delta * 0.05f, 0.0f, 1.0f)); break;
+                case 3: engine_->getEffects().delay.setMix(constrain(engine_->getEffects().delay.getMix() + delta * 0.05f, 0.0f, 1.0f)); break;
+                case 4: engine_->getEffects().chorus.setMix(constrain(engine_->getEffects().chorus.getMix() + delta * 0.05f, 0.0f, 1.0f)); break;
             }
             break;
 
@@ -196,9 +210,13 @@ void DisplayManager::adjustValue(int delta) {
                 sdWaveMode_ = !sdWaveMode_;
                 sdFileIndex_ = 0;
             } else if (selectedItem_ == 1) {
+                int maxFiles = sdWaveMode_ ? engine_->getWavetableManager().getWaveFileCount() : 16;
                 sdFileIndex_ += delta;
+                if (sdFileIndex_ < 0) sdFileIndex_ = maxFiles - 1;
+                if (sdFileIndex_ >= maxFiles) sdFileIndex_ = 0;
                 if (sdFileIndex_ < 0) sdFileIndex_ = 0;
-                // Clamp to max files in directory (to be implemented properly)
+            } else if (selectedItem_ == 2) {
+                sdSlot_ = (sdSlot_ == 0) ? 1 : 0;
             }
             break;
 
@@ -215,6 +233,7 @@ void DisplayManager::drawUI() {
         case DisplayPage::FILTER: drawFilterPage(); break;
         case DisplayPage::ENVELOPES: drawEnvPage(); break;
         case DisplayPage::EFFECTS: drawEffectsPage(); break;
+        case DisplayPage::MIXER: drawMixerPage(); break;
         case DisplayPage::SD_BROWSER: drawSDPage(); break;
         default: drawMainPage();
     }
@@ -361,27 +380,57 @@ void DisplayManager::drawEffectsPage() {
     display_.drawStr(60, 58, engine_->getReverb().isEnabled() ? "ON" : "OFF");
 }
 
+void DisplayManager::drawMixerPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "MIXER");
+    display_.drawLine(0, 9, 127, 9);
+
+    snprintf(buf, sizeof(buf), "%s VOL: %.0f%%", selectedItem_ == 0 ? ">" : " ", engine_->getMasterVolume() * 100.0f);
+    display_.drawStr(0, 22, buf);
+
+    snprintf(buf, sizeof(buf), "%s PAN: %.1f", selectedItem_ == 1 ? ">" : " ", engine_->getGlobalPan());
+    display_.drawStr(0, 32, buf);
+
+    snprintf(buf, sizeof(buf), "%s REV MIX: %.0f%%", selectedItem_ == 2 ? ">" : " ", engine_->getReverb().getMix() * 100.0f);
+    display_.drawStr(0, 42, buf);
+
+    snprintf(buf, sizeof(buf), "%s DLY MIX: %.0f%%", selectedItem_ == 3 ? ">" : " ", engine_->getEffects().delay.getMix() * 100.0f);
+    display_.drawStr(0, 52, buf);
+
+    snprintf(buf, sizeof(buf), "%s CHO MIX: %.0f%%", selectedItem_ == 4 ? ">" : " ", engine_->getEffects().chorus.getMix() * 100.0f);
+    display_.drawStr(0, 62, buf);
+}
+
 void DisplayManager::drawSDPage() {
     display_.drawStr(0, 7, "SD BROWSER");
     display_.drawLine(0, 9, 127, 9);
 
+    if (loadingFlag_) {
+        display_.drawStr(40, 35, "LOADING...");
+        return;
+    }
+
     display_.drawStr(0, 22, selectedItem_ == 0 ? "> MODE:" : "  MODE:");
     display_.drawStr(50, 22, sdWaveMode_ ? "WAVES" : "PRESETS");
 
-    display_.drawStr(0, 34, "FILE:");
+    display_.drawStr(0, 34, selectedItem_ == 1 ? "> FILE:" : "  FILE:");
 
-    // Browse logic: Encoder 2 delta will change sdFileIndex_
-    // In a real implementation we would scan the directory.
-    // For now we'll show what's in the WavetableManager if in wave mode.
     if (sdWaveMode_) {
         const char* name = engine_->getWavetableManager().getWaveFileName(sdFileIndex_);
-        if (name) display_.drawStr(35, 34, name);
-        else display_.drawStr(35, 34, "<EMPTY>");
+        if (name) display_.drawStr(45, 34, name);
+        else display_.drawStr(45, 34, "<EMPTY>");
     } else {
-        display_.drawStr(35, 34, "preset_0.sy");
+        char buf[16];
+        snprintf(buf, sizeof(buf), "preset_%d.sy", sdFileIndex_);
+        display_.drawStr(45, 34, buf);
     }
 
-    display_.drawStr(0, 58, "ENC2: SCROLL, CLICK: LOAD");
+    if (sdWaveMode_) {
+        display_.drawStr(0, 46, selectedItem_ == 2 ? "> DEST SLOT:" : "  DEST SLOT:");
+        display_.drawStr(80, 46, sdSlot_ == 0 ? "SLOT A" : "SLOT B");
+    }
+
+    display_.drawStr(0, 58, "ENC2: CLICK TO LOAD");
 }
 
 void DisplayManager::displayTaskWrapper(void* param) {

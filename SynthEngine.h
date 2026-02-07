@@ -182,7 +182,7 @@ public:
     
     // Wavetable manager
     WavetableManager& getWavetableManager() { return wtManager_; }
-    void loadWavetableForOsc(int osc, const char* filename);
+    void loadWavetableForOsc(int osc, int slot, const char* filename);
 
     // Master
     void setMasterVolume(float vol);
