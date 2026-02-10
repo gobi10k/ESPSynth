@@ -54,7 +54,9 @@ public:
         notch_ = high_ + low_;
         lastInput_ = input;
 
-        return *activeOutput_;
+        float out = *activeOutput_;
+        CHECK_AND_RESET(out, *this);
+        return out;
     }
     
     // Access individual outputs

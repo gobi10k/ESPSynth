@@ -92,6 +92,14 @@ constexpr uint8_t ENC2_SW_PIN = 13;
 // ============================================================================
 
 constexpr uint8_t SD_CS_PIN   = 4; // Moved from 5 to avoid hardware conflict
+
+// ============================================================================
+// STABILITY MACROS
+// ============================================================================
+
+#define SAFE_CHECK(x) (isnan(x) || isinf(x))
+#define CHECK_AND_RESET(val, obj) if (SAFE_CHECK(val)) { (obj).reset(); val = 0.0f; }
+
 constexpr uint8_t SD_SCK_PIN  = 18;
 constexpr uint8_t SD_MISO_PIN = 19;
 constexpr uint8_t SD_MOSI_PIN = 23;

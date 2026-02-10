@@ -73,13 +73,18 @@ void EuclideanRhythm::regeneratePattern() {
     }
     counts[level] = divisor;
     
-    // Build pattern using the computed structure
+    // Build pattern using Bresenham-like approach (produces same results as Bjorklund)
     memset(pattern, 0, sizeof(pattern));
     
-    // Use a simpler approach: spread pulses evenly
-    for (int i = 0; i < pulses_; i++) {
-        int pos = (i * steps_) / pulses_;
-        pattern[pos] = 1;
+    if (pulses_ > 0) {
+        int error = steps_ / 2;
+        for (int i = 0; i < steps_; i++) {
+            error -= pulses_;
+            if (error < 0) {
+                pattern[i] = 1;
+                error += steps_;
+            }
+        }
     }
     
     // Apply rotation and build mask

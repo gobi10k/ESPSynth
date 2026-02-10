@@ -48,8 +48,8 @@ float Delay::process(float input) {
 }
 
 void Delay::processStereo(float& left, float& right) {
-    if (isnan(left) || isinf(left)) left = 0.0f;
-    if (isnan(right) || isinf(right)) right = 0.0f;
+    if (SAFE_CHECK(left)) left = 0.0f;
+    if (SAFE_CHECK(right)) right = 0.0f;
 
     // Read with linear interpolation
     float readPosF = (float)writePos_ - delaySamples_;
@@ -107,7 +107,7 @@ float Saturation::process(float input) {
 
 void Saturation::processStereo(float& left, float& right) {
     auto saturate = [&](float in) {
-        if (isnan(in) || isinf(in)) return 0.0f;
+        if (SAFE_CHECK(in)) return 0.0f;
         float driven = in * drive_;
     float saturated = 0.0f;
     
@@ -200,8 +200,8 @@ float Chorus::process(float input) {
 }
 
 void Chorus::processStereo(float& left, float& right) {
-    if (isnan(left) || isinf(left)) left = 0.0f;
-    if (isnan(right) || isinf(right)) right = 0.0f;
+    if (SAFE_CHECK(left)) left = 0.0f;
+    if (SAFE_CHECK(right)) right = 0.0f;
 
     bufferL_[writePos_] = (int16_t)(constrain(left, -1.0f, 1.0f) * 32000.0f);
     bufferR_[writePos_] = (int16_t)(constrain(right, -1.0f, 1.0f) * 32000.0f);

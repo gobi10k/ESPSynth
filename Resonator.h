@@ -69,11 +69,17 @@ private:
     void applyDirtyCoefficients();
 
     inline float processResonator(int index, float input) {
-        // Direct Form II Transposed biquad optimized for Bandpass (b1=0, b2=-b0)
-        float b0 = b0_[index];
-        float output = b0 * input + x1_[index];
+        // High-Q 2-pole Resonator (DF2T)
+        // H(z) = b0 / (1 + a1*z^-1 + a2*z^-2)
+        float output = b0_[index] * input + x1_[index];
         x1_[index] = -a1_[index] * output + x2_[index];
-        x2_[index] = -b0 * input - a2_[index] * output;
+        x2_[index] = -a2_[index] * output;
+
+        // Internal stability check for this resonator
+        if (SAFE_CHECK(output)) {
+            x1_[index] = x2_[index] = 0.0f;
+            output = 0.0f;
+        }
         return output;
     }
     

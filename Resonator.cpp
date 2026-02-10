@@ -7,14 +7,14 @@ const char* RESONATOR_PROFILE_NAMES[] = {
     "HARM", "BELL", "DRUM", "TUBE", "MRMB", "CUST"
 };
 
-// Harmonic ratios for each profile
+// Harmonic ratios for each profile - tuned for better spectral character
 const float RESONATOR_RATIOS[][MAX_RESONATORS] = {
-    {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f},           // HARMONIC (string)
-    {1.0f, 2.4f, 3.5f, 4.2f, 5.8f, 6.7f},           // BELL (inharmonic)
-    {1.0f, 1.59f, 2.14f, 2.3f, 2.65f, 2.92f},       // MEMBRANE (drum)
-    {1.0f, 3.0f, 5.0f, 7.0f, 9.0f, 11.0f},          // TUBE (odd harmonics)
-    {1.0f, 2.76f, 5.4f, 8.9f, 13.3f, 18.6f},        // MARIMBA (bar)
-    {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f}            // CUSTOM (default to harmonic)
+    {1.0f, 2.001f, 3.0f, 4.002f, 5.001f, 6.0f},       // HARMONIC (string)
+    {1.0f, 1.6f, 2.381f, 3.0f, 3.487f, 4.393f},       // BELL (inharmonic)
+    {1.0f, 1.585f, 2.135f, 2.297f, 2.647f, 2.917f},   // MEMBRANE (drum)
+    {1.0f, 3.001f, 5.0f, 7.001f, 9.0f, 11.001f},      // TUBE (odd harmonics)
+    {1.0f, 3.997f, 9.432f, 17.06f, 26.89f, 38.91f},   // MARIMBA (bar)
+    {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f}              // CUSTOM
 };
 
 ResonatorBank::ResonatorBank() :
@@ -97,7 +97,6 @@ void ResonatorBank::setMix(float mix) {
 void ResonatorBank::reset() {
     for (int i = 0; i < MAX_RESONATORS; i++) {
         x1_[i] = x2_[i] = 0.0f;
-        x1_[i] = x2_[i] = 0.0f;
     }
     brightnessState_ = 0.0f;
 }
@@ -107,36 +106,37 @@ void ResonatorBank::updateCoefficients() {
                           customRatios_ :
                           RESONATOR_RATIOS[(int)profile_];
     
-    // Effective Q considering damping
-    float effectiveQ = resonance_ * (1.0f - damping_ * 0.8f);
-    effectiveQ = max(0.5f, effectiveQ);
+    // Effective Q considering damping - wider range for more "ping"
+    float effectiveQ = resonance_ * (1.0f - damping_ * 0.5f);
+    effectiveQ = max(1.0f, effectiveQ);
     
     for (int i = 0; i < MAX_RESONATORS; i++) {
         float freq = fundamental_ * ratios[i];
         
-        // Clamp to Nyquist
-        if (freq >= SAMPLE_RATE * 0.45f) {
-            nb0_[i] = nb1_[i] = nb2_[i] = 0.0f;
-            na1_[i] = na2_[i] = 0.0f;
+        // Clamp to Nyquist with safety margin
+        if (freq >= SAMPLE_RATE * 0.48f) {
+            nb0_[i] = 0.0f;
+            na1_[i] = 0.0f;
+            na2_[i] = 0.0f;
             continue;
         }
         
-        // Higher partials decay faster
-        float partialQ = effectiveQ / (1.0f + i * 0.2f * damping_);
+        // Higher partials decay with more control
+        float partialQ = effectiveQ / (1.0f + i * 0.1f * damping_);
         partialQ *= decayFactors_[i];
         
-        // Biquad bandpass coefficients (peaking EQ style)
-        float w0 = 2.0f * M_PI * freq / SAMPLE_RATE;
-        float cosw0 = cosf(w0);
-        float sinw0 = sinf(w0);
-        float alpha = sinw0 / (2.0f * partialQ);
+        // 2-pole resonator coefficients
+        // Pole radius r determines the decay time/bandwidth
+        float r = 1.0f - (M_PI * freq) / (SAMPLE_RATE * partialQ);
+        r = constrain(r, 0.0f, 0.999f);
+
+        float theta = 2.0f * M_PI * freq / SAMPLE_RATE;
+        na1_[i] = -2.0f * r * cosf(theta);
+        na2_[i] = r * r;
         
-        float a0 = 1.0f + alpha;
-        nb0_[i] = (alpha * partialQ) / a0;
-        nb1_[i] = 0.0f;
-        nb2_[i] = (-alpha * partialQ) / a0;
-        na1_[i] = (-2.0f * cosw0) / a0;
-        na2_[i] = (1.0f - alpha) / a0;
+        // Gain normalization: ensure peak gain is audible but safe
+        // Using (1-r) gives roughly unity gain for a resonator
+        nb0_[i] = (1.0f - r) * (1.0f + damping_ * 0.5f);
     }
     
     dirty_ = true;
@@ -148,8 +148,6 @@ void ResonatorBank::applyDirtyCoefficients() {
 
     for (int i = 0; i < MAX_RESONATORS; i++) {
         b0_[i] = nb0_[i];
-        b1_[i] = nb1_[i];
-        b2_[i] = nb2_[i];
         a1_[i] = na1_[i];
         a2_[i] = na2_[i];
     }
@@ -169,12 +167,13 @@ float ResonatorBank::process(float input) {
         resonated += processResonator(i, input) * gains_[i];
     }
     
-    // Normalize and filter
-    resonated *= 0.4f;
+    // Normalize and filter - boosted scaling for noticeability
+    resonated *= 0.6f;
     brightnessState_ += brightnessCoef_ * (resonated - brightnessState_);
     
     // Output limiting to prevent explosion at high Q
     float out = fastTanh(brightnessState_);
 
-    return input + mix_ * (out - input);
+    // Mix dry and wet
+    return input * (1.0f - mix_) + out * mix_;
 }

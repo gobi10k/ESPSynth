@@ -119,7 +119,7 @@ void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
     }
     
     // Early exit for invalid inputs
-    if (isnan(inL) || isinf(inL) || isnan(inR) || isinf(inR)) {
+    if (SAFE_CHECK(inL) || SAFE_CHECK(inR)) {
         outL = inL;
         outR = inR;
         return;

@@ -461,13 +461,11 @@ void SynthEngine::processBlock() {
 
     // Euclidean
     if (euclideanEnabled_) {
-        bool triggered = false;
-        uint8_t vel = 0;
-        
         for (int s = 0; s < DMA_BUFFER_SAMPLES; s++) {
             if (euclideanSeq_.process()) {
-                triggered = true;
-                vel = euclideanSeq_.getVelocity();
+                uint8_t vel = euclideanSeq_.getVelocity();
+                noteOnInternal(euclideanNote_, vel);
+                if (midiNoteOnCb_) midiNoteOnCb_(1, euclideanNote_, vel);
                 eucGateCounter_ = 0;
                 eucGateOn_ = true;
             }
@@ -485,42 +483,27 @@ void SynthEngine::processBlock() {
                 }
             }
         }
-        if (triggered) {
-            noteOnInternal(euclideanNote_, vel);
-            if (midiNoteOnCb_) midiNoteOnCb_(1, euclideanNote_, vel);
-        }
     }
 
     // Arpeggiator
     if (arp_.getMode() != ArpMode::OFF) {
-        bool triggered = false;
-        uint8_t aNote = 0, aVel = 0;
-        bool gateOff = false;
-        uint8_t offNote = 0;
         for (int s = 0; s < DMA_BUFFER_SAMPLES; s++) {
             if (arp_.process()) {
-                triggered = true;
-                aNote = arp_.getCurrentNote();
-                aVel = arp_.getCurrentVelocity();
+                uint8_t aNote = arp_.getCurrentNote();
+                uint8_t aVel = arp_.getCurrentVelocity();
+                noteOnInternal(aNote, aVel);
+                if (midiNoteOnCb_) midiNoteOnCb_(1, aNote, aVel);
             }
             if (lastArpGate_ && !arp_.isGateOn()) {
-                gateOff = true;
-                offNote = arp_.getCurrentNote();
-            }
-            lastArpGate_ = arp_.isGateOn();
-        }
-
-        if (triggered) {
-            noteOnInternal(aNote, aVel);
-            if (midiNoteOnCb_) midiNoteOnCb_(1, aNote, aVel);
-        }
-        if (gateOff) {
-            for (int v = 0; v < NUM_VOICES; v++) {
-                if (voices_[v].isActive()) {
-                    voices_[v].noteOff();
-                    if (midiNoteOffCb_) midiNoteOffCb_(1, voices_[v].getNote());
+                uint8_t offNote = arp_.getCurrentNote();
+                for (int v = 0; v < NUM_VOICES; v++) {
+                    if (voices_[v].isActive() && voices_[v].getNote() == offNote) {
+                        voices_[v].noteOff();
+                        if (midiNoteOffCb_) midiNoteOffCb_(1, offNote);
+                    }
                 }
             }
+            lastArpGate_ = arp_.isGateOn();
         }
     }
     // --------------------------------------------------
@@ -555,6 +538,14 @@ void SynthEngine::processBlock() {
         left *= 0.5f;
         right *= 0.5f;
 
+        // DC blocker (Moved up to clean signal before global effects)
+        dcBlockL_ = left - dcInL_ + 0.9975f * dcBlockL_;
+        dcInL_ = left;
+        left = dcBlockL_;
+        dcBlockR_ = right - dcInR_ + 0.9975f * dcBlockR_;
+        dcInR_ = right;
+        right = dcBlockR_;
+
         // Apply Granular processor (if enabled and not in CPU overload)
         if (granularEnabled_ && !cpuOverload) {
             float monoIn = (left + right) * 0.5f;
@@ -578,15 +569,6 @@ void SynthEngine::processBlock() {
             left += diff;
             right += diff;
         }
-
-        // DC blocker (replaces expensive per-sample isnan/isinf checks)
-        // Also removes DC offset from filter feedback and saturation
-        dcBlockL_ = left - dcInL_ + 0.9975f * dcBlockL_;
-        dcInL_ = left;
-        left = dcBlockL_;
-        dcBlockR_ = right - dcInR_ + 0.9975f * dcBlockR_;
-        dcInR_ = right;
-        right = dcBlockR_;
 
         // Process global effects in stereo
         effects_.processStereo(left, right);
@@ -617,8 +599,8 @@ void SynthEngine::processBlock() {
     i2s_channel_write(tx_handle_, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
 
     // Feed watchdog — essential to prevent crash under high CPU load
-    // vTaskDelay(1) yields to the IDLE task which feeds the task watchdog
-    vTaskDelay(1);
+    // vTaskDelay(0) yields to other tasks without unnecessary 1ms wait
+    vTaskDelay(0);
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {

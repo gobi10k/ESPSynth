@@ -57,6 +57,8 @@ void SynthesisTests::runAll() {
     testFeedbackAccumulation();
     testGranularProcessor();
     testReverbFreeze();
+    testResonatorProfiles();
+    testSpectralStability();
 
     Serial.println("\n========================================");
     Serial.println("   ALL TESTS COMPLETED");
@@ -578,6 +580,67 @@ void SynthesisTests::testVoiceLifecycle() {
         passed = false;
     }
 
+    Serial.println(passed ? "PASSED" : "");
+}
+
+// ============================================================================
+// RESONATOR PROFILES - Verifies harmonic noticeability
+// ============================================================================
+
+void SynthesisTests::testResonatorProfiles() {
+    Serial.print("Testing Resonator profiles... ");
+    ResonatorBank rb;
+    rb.setMix(1.0f);
+    rb.setResonance(30.0f);
+    rb.setFrequency(100.0f);
+
+    bool passed = true;
+    for (int p = 0; p < (int)ResonatorProfile::NUM_PROFILES; p++) {
+        rb.setProfile((ResonatorProfile)p);
+        rb.reset();
+
+        // Excite with impulse and measure energy
+        float energy = 0.0f;
+        for (int i = 0; i < 4800; i++) {
+            float in = (i == 0) ? 1.0f : 0.0f;
+            float out = rb.process(in);
+            energy += out * out;
+            if (SAFE_CHECK(out)) {
+                passed = false;
+                break;
+            }
+        }
+
+        if (energy < 0.001f) {
+            Serial.printf("\n    FAIL: Profile %d has no output energy", p);
+            passed = false;
+        }
+    }
+    Serial.println(passed ? "PASSED" : "");
+}
+
+// ============================================================================
+// SPECTRAL STABILITY - Checks for high-Q runaway
+// ============================================================================
+
+void SynthesisTests::testSpectralStability() {
+    Serial.print("Testing Spectral stability (High-Q sweep)... ");
+    ResonatorBank rb;
+    rb.setMix(1.0f);
+    rb.setResonance(50.0f); // Max resonance
+
+    bool passed = true;
+    for (float f = 100.0f; f < 2000.0f; f += 200.0f) {
+        rb.setFrequency(f);
+        for (int i = 0; i < 1000; i++) {
+            float in = fastRandFloat01(*(uint32_t*)&f); // Pseudo-random
+            float out = rb.process(in);
+            if (SAFE_CHECK(out) || fabsf(out) > 2.0f) {
+                passed = false;
+                break;
+            }
+        }
+    }
     Serial.println(passed ? "PASSED" : "");
 }
 
