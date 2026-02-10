@@ -68,6 +68,7 @@ SynthEngine::SynthEngine() :
 
 bool SynthEngine::init() {
     Wavetables::init();
+
     
     // Modern I2S API Configuration
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
@@ -619,8 +620,15 @@ void SynthEngine::processBlock() {
 
 void SynthEngine::audioTaskWrapper(void* param) {
     SynthEngine* engine = static_cast<SynthEngine*>(param);
+
+    // Subscribe this task to the Task Watchdog Timer (TWDT)
+    esp_task_wdt_add(NULL);
+
     while (engine->running_) {
         engine->processBlock();
     }
+
+    // Unsubscribe before deleting
+    esp_task_wdt_delete(NULL);
     vTaskDelete(NULL);
 }
