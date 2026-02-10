@@ -31,6 +31,9 @@ static float benchmarkUs(F func, int iterations) {
 }
 
 void SynthesisTests::runAll() {
+    // Subscribe the current task (usually loopTask) to TWDT
+    esp_task_wdt_add(NULL);
+
     Serial.println("\n========================================");
     Serial.println("   SYNTHESIS TESTS & CRASH DIAGNOSTICS");
     Serial.println("========================================\n");
@@ -68,6 +71,9 @@ void SynthesisTests::runAll() {
     Serial.println("\n========================================");
     Serial.println("   ALL TESTS COMPLETED");
     Serial.println("========================================\n");
+
+    // Unsubscribe before returning
+    esp_task_wdt_delete(NULL);
 }
 
 // ============================================================================
