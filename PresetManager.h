@@ -118,7 +118,7 @@ struct __attribute__((packed)) PresetData {
     uint8_t osc1SupersawDetune;
     uint8_t osc2SupersawDetune;
     uint8_t legato;
-    uint8_t reserved1;
+    uint8_t masterVolume;
 
     uint8_t reserved[15];
     

@@ -3,7 +3,9 @@
 
 #include <Arduino.h>
 
+#ifndef TWO_PI
 #define TWO_PI 6.28318530717958647693f
+#endif
 #define TWO_PI_INV_SR -0.00013089969f // -2 * PI / 48000
 
 /**

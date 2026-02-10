@@ -43,6 +43,7 @@ bool chorusEnabled = false;
 bool delayEnabled = false;
 int selectedLFO = 0;
 bool autoStats = false;
+bool midiLog = false;
 uint32_t lastHeartbeatBlock = 0;
 
 // ============================================================================
@@ -50,14 +51,17 @@ uint32_t lastHeartbeatBlock = 0;
 // ============================================================================
 
 void onMIDINoteOn(uint8_t ch, uint8_t note, uint8_t vel) {
+    if (midiLog) Serial.printf("[MIDI IN] NoteOn  ch=%d note=%d vel=%d\n", ch, note, vel);
     synth.noteOn(note, vel);
 }
 
 void onMIDINoteOff(uint8_t ch, uint8_t note) {
+    if (midiLog) Serial.printf("[MIDI IN] NoteOff ch=%d note=%d\n", ch, note);
     synth.noteOff(note);
 }
 
 void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
+    if (midiLog) Serial.printf("[MIDI IN] CC ch=%d cc=%d val=%d\n", ch, cc, val);
     switch (cc) {
         case MIDI_CC::MOD_WHEEL:
             synth.getLFO(0).setDepth(val / 127.0f);
@@ -105,6 +109,9 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
             synth.getReverb().setMix(val / 127.0f);
             if (val > 0) synth.getReverb().setEnabled(true);
             break;
+        case MIDI_CC::REVERB_FREEZE:
+            synth.getReverb().setFreeze(val >= 64);
+            break;
         case MIDI_CC::DELAY_SEND:
             synth.getEffects().delay.setMix(val / 127.0f);
             break;
@@ -139,10 +146,12 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
 }
 
 void onMIDIPitchBend(uint8_t ch, int16_t val) {
+    if (midiLog) Serial.printf("[MIDI IN] PitchBend ch=%d val=%d\n", ch, val);
     synth.setPitchBend(val);
 }
 
 void onMIDIProgramChange(uint8_t ch, uint8_t program) {
+    if (midiLog) Serial.printf("[MIDI IN] ProgramChange ch=%d prog=%d\n", ch, program);
     PresetData p;
     if (presets.loadPreset(program, p)) {
         applyPreset(p);
@@ -239,7 +248,7 @@ void applyPreset(const PresetData& p) {
 
     synth.getGranular().setDensity(p.granDensity);
     synth.getGranular().setDuration(p.granDuration);
-    synth.getGranular().setGranularMix(p.granMix / 100.0f);
+    synth.setGranularMix(p.granMix / 100.0f);
     synth.getGranular().setSource((GrainSource)p.granSource);
 
     synth.setGlideTime(p.glideTime);
@@ -258,11 +267,11 @@ PresetData createPresetFromCurrent(const char* name) {
     p.osc2Wave = (uint8_t)synth.getOscWaveform(1);
     p.osc1Detune = (int8_t)synth.getOscDetune(0);
     p.osc2Detune = (int8_t)synth.getOscDetune(1);
-    p.osc1Coarse = (int8_t)synth.getVoice(0).getOscCoarse(0); // Coarse and other params should be in synth too
-    p.osc2Coarse = (int8_t)synth.getVoice(0).getOscCoarse(1);
+    p.osc1Coarse = (int8_t)synth.getOscCoarse(0);
+    p.osc2Coarse = (int8_t)synth.getOscCoarse(1);
     p.oscMix = (uint8_t)(synth.getOscMix() * 100.0f);
-    p.osc1SupersawDetune = (uint8_t)(synth.getVoice(0).getOscSupersawDetune(0) * 100.0f);
-    p.osc2SupersawDetune = (uint8_t)(synth.getVoice(0).getOscSupersawDetune(1) * 100.0f);
+    p.osc1SupersawDetune = (uint8_t)(synth.getOscSupersawDetune(0) * 100.0f);
+    p.osc2SupersawDetune = (uint8_t)(synth.getOscSupersawDetune(1) * 100.0f);
 
     p.filterCutoff = (uint16_t)synth.getFilterCutoff();
     p.filterReso = (uint8_t)(synth.getFilterResonance() * 100.0f);
@@ -442,9 +451,13 @@ void printHelp() {
     Serial.println("  fe<-99-99> Env amount %");
     Serial.println("");
     Serial.println("-- Resonator (ft2) --");
-    Serial.println("  rp<0-5>    Profile (harm/bell/drum/tube/marimba/custom)");
-    Serial.println("  rd<0-99>   Damping %");
-    Serial.println("  rb<0-99>   Brightness %");
+    Serial.println("  Mx         Toggle resonator");
+    Serial.println("  Mf<hz>     Frequency");
+    Serial.println("  Mq<0.5-50> Resonance (Q)");
+    Serial.println("  Mp<0-5>    Profile (harm/bell/drum/tube/marimba/custom)");
+    Serial.println("  Md<0-99>   Damping %");
+    Serial.println("  Mb<0-99>   Brightness %");
+    Serial.println("  Mm<0-99>   Mix %");
     Serial.println("");
     Serial.println("-- Comb (ft3) --");
     Serial.println("  cm<0-3>    Mode (fb/ff/allpass/karplus)");
@@ -520,7 +533,16 @@ void printHelp() {
     Serial.println("  t          Run internal tests");
     Serial.println("  S          Stress test (4 notes, FX on)");
     Serial.println("  k          Isolated module stress test (sequential)");
+    Serial.println("");
+    Serial.println("-- MIDI Debug --");
+    Serial.println("  ml         Toggle MIDI message log");
+    Serial.println("  mr         Toggle MIDI raw byte log");
+    Serial.println("  ms         MIDI stats (bytes/messages received)");
+    Serial.println("  mt         MIDI TX test (sends C major chord)");
+    Serial.println("  mc<1-16>   Set MIDI channel (0=omni)");
+    Serial.println("  me         Encoder debug");
     Serial.println("  V          List active voices status");
+    Serial.println("  me         Encoder debug (pin states + ISR counts)");
     Serial.println("  ?          Help");
 }
 
@@ -651,12 +673,21 @@ void processCommand(const String& cmd) {
             if (c1 == 'x') {
                 synth.setResonatorEnabled(!synth.isResonatorEnabled());
                 Serial.printf("Resonator: %s\n", synth.isResonatorEnabled() ? "ON" : "OFF");
+            } else if (c1 == 'f') {
+                synth.getResonator().setFrequency(value);
+                Serial.printf("Res freq: %.1f Hz\n", value);
+            } else if (c1 == 'q') {
+                synth.getResonator().setResonance(value);
+                Serial.printf("Res Q: %.1f\n", value);
             } else if (c1 == 'p') {
                 synth.getResonator().setProfile((ResonatorProfile)((int)value % 6));
-                Serial.printf("Res profile: %d\n", (int)value);
+                Serial.printf("Res profile: %s\n", RESONATOR_PROFILE_NAMES[(int)value % 6]);
             } else if (c1 == 'd') {
                 synth.getResonator().setDamping(value / 100.0f);
                 Serial.printf("Res damp: %.0f%%\n", value);
+            } else if (c1 == 'b') {
+                synth.getResonator().setBrightness(value / 100.0f);
+                Serial.printf("Res bright: %.0f%%\n", value);
             } else if (c1 == 'm') {
                 synth.getResonator().setMix(value / 100.0f);
                 Serial.printf("Res mix: %.0f%%\n", value);
@@ -1035,8 +1066,45 @@ void processCommand(const String& cmd) {
             Serial.println("Panic reset complete.");
             break;
         case 'm':
-            Serial.printf("System Heap: %d bytes free\n", ESP.getFreeHeap());
-            Serial.printf("Min Heap: %d bytes\n", ESP.getMinFreeHeap());
+            if (c1 == 'l') {
+                midiLog = !midiLog;
+                Serial.printf("MIDI message log: %s\n", midiLog ? "ON" : "OFF");
+            } else if (c1 == 'r') {
+                bool raw = !midi.getRawLog();
+                midi.setRawLog(raw);
+                Serial.printf("MIDI raw byte log: %s\n", raw ? "ON" : "OFF");
+            } else if (c1 == 's') {
+                Serial.printf("MIDI Stats: %u bytes received, %u messages parsed\n",
+                              midi.getRxCount(), midi.getMsgCount());
+                Serial.printf("MIDI Channel: %d (%s)\n", midi.getChannel(),
+                              midi.getChannel() == 0 ? "Omni" : "Filtered");
+            } else if (c1 == 't') {
+                Serial.println("MIDI TX test: sending C major chord (C4 E4 G4)...");
+                midi.sendNoteOn(60, 100, 1);
+                midi.sendNoteOn(64, 100, 1);
+                midi.sendNoteOn(67, 100, 1);
+                delay(500);
+                midi.sendNoteOff(60, 1);
+                midi.sendNoteOff(64, 1);
+                midi.sendNoteOff(67, 1);
+                Serial.println("MIDI TX test complete.");
+            } else if (c1 == 'c') {
+                uint8_t ch = (uint8_t)value;
+                midi.setChannel(ch);
+                Serial.printf("MIDI channel: %d (%s)\n", ch, ch == 0 ? "Omni" : "Filtered");
+            } else if (c1 == 'e') {
+                Serial.println("=== ENCODER DEBUG (turn encoders now) ===");
+                for (int i = 0; i < 10; i++) {
+                    encNav.printDebug();
+                    encVal.printDebug();
+                    Serial.println("---");
+                    delay(500);
+                }
+                Serial.println("=== END ENCODER DEBUG ===");
+            } else {
+                Serial.printf("System Heap: %d bytes free\n", ESP.getFreeHeap());
+                Serial.printf("Min Heap: %d bytes\n", ESP.getMinFreeHeap());
+            }
             break;
         // === GRANULAR / GLIDE ===
         case 'G':

@@ -49,6 +49,8 @@ namespace MIDI_CC {
     constexpr uint8_t FILTER_KEY_TRACK = 23;
     constexpr uint8_t FILTER_ENV_VEL = 24;
 
+    constexpr uint8_t REVERB_FREEZE = 82;
+
     constexpr uint8_t ALL_NOTES_OFF = 123;
 }
 
@@ -75,6 +77,15 @@ public:
     void setChannel(uint8_t channel);  // 0 = omni
     uint8_t getChannel() const { return channel_; }
     
+    // Raw byte logging for debugging connections
+    void setRawLog(bool en) { rawLog_ = en; }
+    bool getRawLog() const { return rawLog_; }
+    
+    // Stats
+    uint32_t getRxCount() const { return rxCount_; }
+    uint32_t getMsgCount() const { return msgCount_; }
+    void resetStats() { rxCount_ = 0; msgCount_ = 0; }
+    
     // Register callbacks
     void setNoteOnCallback(NoteOnCallback cb) { noteOnCb_ = cb; }
     void setNoteOffCallback(NoteOffCallback cb) { noteOffCb_ = cb; }
@@ -93,6 +104,9 @@ private:
     void parseMessage();
     
     uint8_t channel_;
+    bool rawLog_ = false;
+    uint32_t rxCount_ = 0;
+    uint32_t msgCount_ = 0;
     
     // Parser state
     uint8_t runningStatus_;

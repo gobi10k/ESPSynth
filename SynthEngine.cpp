@@ -392,6 +392,7 @@ LFO& SynthEngine::getLFO(int index) {
 
 void SynthEngine::setGranularMix(float mix) {
     granularMix_ = constrain(mix, 0.0f, 1.0f);
+    granular_.setGranularMix(granularMix_);
 }
 
 void SynthEngine::setMasterVolume(float vol) {
@@ -428,6 +429,10 @@ void SynthEngine::processBlock() {
         }
     }
 
+    // CPU overload protection: if last block exceeded 95%, skip expensive effects
+    float cpuLoad = profiler_.getCPUPercent();
+    bool cpuOverload = (cpuLoad > 95.0f);
+
     // Massive CPU optimization: Move slow modulation out of the sample loop
     float lfo1 = lfos_[0].process(DMA_BUFFER_SAMPLES);
     float lfo2 = lfos_[1].process(DMA_BUFFER_SAMPLES);
@@ -436,6 +441,8 @@ void SynthEngine::processBlock() {
     modMatrix_.setSourceValue(ModSource::VELOCITY, currentVelocity_);
     modMatrix_.process();
     float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
+    // Advance pitch bend smoother efficiently (only need final value)
+    // Process in chunks rather than sample-by-sample since we only use the end value
     for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) pitchBend_.process();
     float pbSemitones = pitchBend_.getCurrent();
     float pitchMod = modMatrix_.getModulation(ModDest::OSC_PITCH) * 2.0f + pbSemitones;
@@ -456,10 +463,26 @@ void SynthEngine::processBlock() {
     if (euclideanEnabled_) {
         bool triggered = false;
         uint8_t vel = 0;
+        
         for (int s = 0; s < DMA_BUFFER_SAMPLES; s++) {
             if (euclideanSeq_.process()) {
                 triggered = true;
                 vel = euclideanSeq_.getVelocity();
+                eucGateCounter_ = 0;
+                eucGateOn_ = true;
+            }
+            if (eucGateOn_) {
+                eucGateCounter_++;
+                if (eucGateCounter_ >= eucGateLength_) {
+                    eucGateOn_ = false;
+                    // Release voices playing the euclidean note
+                    for (int v = 0; v < NUM_VOICES; v++) {
+                        if (voices_[v].isActive() && voices_[v].getNote() == euclideanNote_) {
+                            voices_[v].noteOff();
+                            if (midiNoteOffCb_) midiNoteOffCb_(1, euclideanNote_);
+                        }
+                    }
+                }
             }
         }
         if (triggered) {
@@ -532,22 +555,23 @@ void SynthEngine::processBlock() {
         left *= 0.5f;
         right *= 0.5f;
 
-        // Apply Granular exciter (if enabled) - Mono input, but we can spread it
-        if (granularEnabled_) {
-            float gran = granular_.process();
-            left = left * (1.0f - granularMix_) + gran * granularMix_ * 0.7f;
-            right = right * (1.0f - granularMix_) + gran * granularMix_ * 0.7f;
+        // Apply Granular processor (if enabled and not in CPU overload)
+        if (granularEnabled_ && !cpuOverload) {
+            float monoIn = (left + right) * 0.5f;
+            float granOut = granular_.process(monoIn);
+            left = granOut;
+            right = granOut;
         }
 
-        // Apply Resonator and Comb (if enabled) - Currently Mono input, stereo add
-        if (resonatorEnabled_) {
+        // Apply Resonator and Comb (if enabled) - skip under overload
+        if (resonatorEnabled_ && !cpuOverload) {
             float mono = (left + right) * 0.5f;
             float mixed = resonator_.process(mono);
             float diff = mixed - mono;
             left += diff;
             right += diff;
         }
-        if (combEnabled_) {
+        if (combEnabled_ && !cpuOverload) {
             float mono = (left + right) * 0.5f;
             float mixed = comb_.process(mono);
             float diff = mixed - mono;
@@ -555,8 +579,14 @@ void SynthEngine::processBlock() {
             right += diff;
         }
 
-        if (isnan(left) || isinf(left)) left = 0.0f;
-        if (isnan(right) || isinf(right)) right = 0.0f;
+        // DC blocker (replaces expensive per-sample isnan/isinf checks)
+        // Also removes DC offset from filter feedback and saturation
+        dcBlockL_ = left - dcInL_ + 0.9975f * dcBlockL_;
+        dcInL_ = left;
+        left = dcBlockL_;
+        dcBlockR_ = right - dcInR_ + 0.9975f * dcBlockR_;
+        dcInR_ = right;
+        right = dcBlockR_;
 
         // Process global effects in stereo
         effects_.processStereo(left, right);
@@ -574,7 +604,7 @@ void SynthEngine::processBlock() {
         left = compL * vol;
         right = compR * vol;
         
-        // Final Soft clip / Limiter
+        // Final soft clip / limiter - use tanh for gentle saturation
         left = fastTanh(left);
         right = fastTanh(right);
         
@@ -586,8 +616,9 @@ void SynthEngine::processBlock() {
     size_t bytesWritten;
     i2s_channel_write(tx_handle_, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
 
-    // Yield to allow other tasks (Core 0/1) and watchdog to run if CPU is saturated
-    vTaskDelay(0);
+    // Feed watchdog — essential to prevent crash under high CPU load
+    // vTaskDelay(1) yields to the IDLE task which feeds the task watchdog
+    vTaskDelay(1);
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {

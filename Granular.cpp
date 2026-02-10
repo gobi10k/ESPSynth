@@ -4,7 +4,7 @@
 #include <math.h>
 #include <string.h>
 
-const char* GRAIN_SOURCE_NAMES[] = {"NOI", "SIN", "IMP", "TRI", "DST"};
+const char* GRAIN_SOURCE_NAMES[] = {"NOI", "SIN", "IMP", "TRI", "DST", "INP"};
 
 float GranularExciter::hannTable_[WINDOW_TABLE_SIZE];
 float GranularExciter::expTable_[WINDOW_TABLE_SIZE];
@@ -17,15 +17,18 @@ GranularExciter::GranularExciter() :
     basePitch_(440.0f),
     pitchSpread_(0.0f),
     amplitude_(0.5f),
+    granularMix_(0.5f),
     source_(GrainSource::NOISE),
     window_(GrainWindow::HANN),
     freeRunning_(true),
+    inputWritePos_(0),
     samplesPerGrain_(0.0f),
     sampleCounter_(0.0f),
     noiseState_(12345),
     dustProb_(0.001f)
 {
     memset(grains_, 0, sizeof(grains_));
+    memset(inputBuffer_, 0, sizeof(inputBuffer_));
     setDensity(density_);
 
     if (!tablesInitialized_) {
@@ -109,7 +112,102 @@ void GranularExciter::trigger(float pitch, float amp) {
 }
 
 void GranularExciter::spawnGrain() {
-    trigger();
+    spawnGrain(false);
+}
+
+void GranularExciter::spawnGrain(bool useInputBuffer) {
+    // Find free grain slot
+    for (int i = 0; i < MAX_GRAINS; i++) {
+        if (!grains_[i].active) {
+            Grain& g = grains_[i];
+            g.active = true;
+            g.position = 0.0f;
+            g.amplitude = amplitude_;
+            g.source = useInputBuffer ? GrainSource::INPUT_BUFFER : source_;
+            g.window = window_;
+            
+            // Duration with randomization
+            float durationVariation = 1.0f + fastRandFloat(noiseState_) * durationSpread_;
+            g.duration = (durationMs_ * 0.001f) * SAMPLE_RATE * durationVariation;
+            g.duration = max(10.0f, g.duration);
+            g.invDuration = 1.0f / g.duration;
+            
+            // For input buffer grains: start reading from a random offset behind write head
+            if (useInputBuffer) {
+                uint16_t maxOffset = min((uint16_t)(g.duration + 64), (uint16_t)(INPUT_BUF_SIZE - 1));
+                uint16_t offset = (uint16_t)(fastRandFloat01(noiseState_) * maxOffset);
+                g.bufStartPos = (inputWritePos_ - offset + INPUT_BUF_SIZE) % INPUT_BUF_SIZE;
+            } else {
+                g.bufStartPos = 0;
+            }
+            
+            // Pitch with randomization
+            float pitchVariation = fastRandFloat(noiseState_) * pitchSpread_;
+            float grainPitch = basePitch_ * fastExp2(pitchVariation / 12.0f);
+            g.phaseIncrement = (uint32_t)(grainPitch * PHASE_INCREMENT_MULTIPLIER);
+            g.phase = 0;
+            
+            return;
+        }
+    }
+}
+
+float GranularExciter::process(float input) {
+    // Write input to circular buffer
+    inputBuffer_[inputWritePos_] = input;
+    inputWritePos_ = (inputWritePos_ + 1) % INPUT_BUF_SIZE;
+    
+    // Auto-spawn grains using input buffer as source
+    if (freeRunning_) {
+        sampleCounter_ += 1.0f;
+        if (sampleCounter_ >= samplesPerGrain_) {
+            sampleCounter_ -= samplesPerGrain_;
+            spawnGrain(true); // Use input buffer
+        }
+    }
+    
+    // Sum all active grains (same rendering as exciter mode)
+    float output = 0.0f;
+    int activeCount = 0;
+    for (int i = 0; i < MAX_GRAINS; i++) {
+        Grain& g = grains_[i];
+        if (!g.active) continue;
+
+        float sample = 0.0f;
+        switch (g.source) {
+            case GrainSource::INPUT_BUFFER: {
+                uint16_t readPos = (g.bufStartPos + (uint16_t)g.position) % INPUT_BUF_SIZE;
+                sample = inputBuffer_[readPos];
+                break;
+            }
+            default:
+                // Fallback to exciter sources if somehow mixed
+                sample = fastRandFloat(noiseState_);
+                break;
+        }
+
+        float windowedPos = g.position * g.invDuration;
+        int winIdx = (int)(windowedPos * (WINDOW_TABLE_SIZE - 1));
+        if (winIdx < 0) winIdx = 0; else if (winIdx >= WINDOW_TABLE_SIZE) winIdx = WINDOW_TABLE_SIZE - 1;
+
+        float window = hannTable_[winIdx]; // Default to Hann for processor mode
+
+        output += sample * window * g.amplitude;
+        activeCount++;
+
+        g.phase += g.phaseIncrement;
+        g.position += 1.0f;
+        if (g.position >= g.duration) {
+            g.active = false;
+        }
+    }
+    
+    if (activeCount > 1) {
+        output /= sqrtf((float)activeCount);
+    }
+
+    // Mix: dry + granular wet
+    return input * (1.0f - granularMix_) + output * granularMix_;
 }
 
 
@@ -150,6 +248,12 @@ float GranularExciter::process() {
                     sample = fastRandFloat(noiseState_);
                 }
                 break;
+            case GrainSource::INPUT_BUFFER: {
+                // Read from circular input buffer at grain's start offset + current position
+                uint16_t readPos = (g.bufStartPos + (uint16_t)g.position) % INPUT_BUF_SIZE;
+                sample = inputBuffer_[readPos];
+                break;
+            }
             default: break;
         }
 
@@ -161,7 +265,7 @@ float GranularExciter::process() {
         float window = 1.0f;
         switch (g.window) {
             case GrainWindow::HANN:
-            case GrainWindow::BLACKMAN:
+            case GrainWindow::BLACKMAN: // Uses Hann table (true Blackman not worth the extra table memory)
                 window = hannTable_[winIdx];
                 break;
             case GrainWindow::TRIANGLE:

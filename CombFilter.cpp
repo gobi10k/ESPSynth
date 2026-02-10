@@ -1,9 +1,12 @@
 #include "CombFilter.h"
-#include "MathUtils.h"
-#include <math.h>
-#include <string.h>
+#include <cmath>
+#include <cstring>
 
 const char* COMB_MODE_NAMES[] = {"FB", "FF", "AP", "K-S"};
+
+// Precomputed conversion factors
+constexpr float INT16_TO_FLOAT = 1.0f / 32768.0f;
+constexpr float FLOAT_TO_INT16 = 32768.0f;
 
 CombFilter::CombFilter() :
     writePos_(0),
@@ -17,31 +20,46 @@ CombFilter::CombFilter() :
     allpassCoef_(0.5f),
     exciteLevel_(0.0f),
     exciteCounter_(0),
-    noiseState_(44444),
-    lastDelayed_(0.0f)
+    noiseState_(0xABCD),
+    lastDelayed_(0.0f),
+    interpType_(InterpType::LINEAR_FAST)
 {
+    oneMinusDamping_ = 1.0f - damping_;
+    oneMinusMix_ = 1.0f - mix_;
     reset();
 }
 
 void CombFilter::setPitch(float hz) {
-    hz = constrain(hz, 40.0f, 5000.0f);  // 40Hz min (was 20Hz)
+    hz = constrain(hz, 40.0f, 5000.0f);
     delaySamples_ = SAMPLE_RATE / hz;
     delaySamples_ *= detuneRatio_;
-    if (delaySamples_ >= COMB_BUFFER_SIZE - 1) {
+    
+    // Clamp with safety margin
+    if (delaySamples_ >= COMB_BUFFER_SIZE - 2) {
         delaySamples_ = COMB_BUFFER_SIZE - 2;
+    }
+    if (delaySamples_ < 2.0f) {
+        delaySamples_ = 2.0f;
     }
 }
 
 void CombFilter::setDelaySamples(float samples) {
-    delaySamples_ = constrain(samples, 1.0f, COMB_BUFFER_SIZE - 2.0f);
+    if (samples < 2.0f) samples = 2.0f;
+    else if (samples > COMB_BUFFER_SIZE - 2) samples = COMB_BUFFER_SIZE - 2;
+    delaySamples_ = samples;
 }
 
 void CombFilter::setFeedback(float fb) {
-    feedback_ = constrain(fb, -0.99f, 0.99f);
+    if (fb < -0.99f) fb = -0.99f;
+    else if (fb > 0.99f) fb = 0.99f;
+    feedback_ = fb;
 }
 
 void CombFilter::setDamping(float damp) {
-    damping_ = constrain(damp, 0.0f, 0.99f);
+    if (damp < 0.0f) damp = 0.0f;
+    else if (damp > 0.99f) damp = 0.99f;
+    damping_ = damp;
+    oneMinusDamping_ = 1.0f - damp;
 }
 
 void CombFilter::setMode(CombMode mode) {
@@ -49,11 +67,15 @@ void CombFilter::setMode(CombMode mode) {
 }
 
 void CombFilter::setMix(float mix) {
-    mix_ = constrain(mix, 0.0f, 1.0f);
+    if (mix < 0.0f) mix = 0.0f;
+    else if (mix > 1.0f) mix = 1.0f;
+    mix_ = mix;
+    oneMinusMix_ = 1.0f - mix;
 }
 
 void CombFilter::setDetune(float cents) {
-    detuneRatio_ = powf(2.0f, cents / 1200.0f);
+    // Use fast approximation
+    detuneRatio_ = fastExp2(cents / 1200.0f);
 }
 
 float CombFilter::getPitch() const {
@@ -62,7 +84,7 @@ float CombFilter::getPitch() const {
 
 void CombFilter::excite(float amplitude) {
     exciteLevel_ = amplitude;
-    exciteCounter_ = (int)delaySamples_;
+    exciteCounter_ = static_cast<int16_t>(delaySamples_);
 }
 
 void CombFilter::reset() {
@@ -72,36 +94,103 @@ void CombFilter::reset() {
     exciteLevel_ = 0.0f;
     exciteCounter_ = 0;
     lastDelayed_ = 0.0f;
+    noiseState_ = 0xABCD;
 }
 
-float CombFilter::process(float input) {
-    if (isnan(input) || isinf(input)) return 0.0f;
+inline float CombFilter::int16ToFloat(int16_t value) {
+    // Fast int16 to float conversion
+    return static_cast<float>(value) * INT16_TO_FLOAT;
+}
 
+inline int16_t CombFilter::floatToInt16(float value) {
+    // Fast float to int16 with clipping
+    if (value > 1.0f) value = 1.0f;
+    else if (value < -1.0f) value = -1.0f;
+    return static_cast<int16_t>(value * 32767.0f);
+}
+
+inline float CombFilter::readDelay(float delay) {
+    // No interpolation (fastest)
+    float readPos = static_cast<float>(writePos_) - delay;
+    if (readPos < 0.0f) readPos += COMB_BUFFER_SIZE;
+    
+    int readIdx = static_cast<int>(readPos);
+    return int16ToFloat(buffer_[readIdx]);
+}
+
+inline float CombFilter::readDelayLinear(float delay) {
+    // Linear interpolation
+    float readPos = static_cast<float>(writePos_) - delay;
+    if (readPos < 0.0f) readPos += COMB_BUFFER_SIZE;
+    
+    int readIdx0 = static_cast<int>(readPos);
+    int readIdx1 = readIdx0 + 1;
+    if (readIdx1 >= COMB_BUFFER_SIZE) readIdx1 = 0;
+    
+    float frac = readPos - static_cast<float>(readIdx0);
+    
+    float s0 = int16ToFloat(buffer_[readIdx0]);
+    float s1 = int16ToFloat(buffer_[readIdx1]);
+    
+    return s0 + frac * (s1 - s0);
+}
+
+inline float CombFilter::readDelayLinearFast(float delay) {
+    // Optimized linear interpolation with integer math
+    float readPos = static_cast<float>(writePos_) - delay;
+    if (readPos < 0.0f) readPos += COMB_BUFFER_SIZE;
+    
+    int readIdx0 = static_cast<int>(readPos);
+    int readIdx1 = readIdx0 + 1;
+    if (readIdx1 >= COMB_BUFFER_SIZE) readIdx1 = 0;
+    
+    float frac = readPos - static_cast<float>(readIdx0);
+    
+    // Get integer values and interpolate in integer domain
+    int32_t s0 = buffer_[readIdx0];
+    int32_t s1 = buffer_[readIdx1];
+    
+    // Linear interpolation: s0 + frac*(s1 - s0)
+    // Scale to maintain precision
+    int32_t result = s0 + static_cast<int32_t>(frac * (s1 - s0));
+    
+    return static_cast<float>(result) * INT16_TO_FLOAT;
+}
+
+inline void CombFilter::writeBuffer(float value) {
+    // Use polynomial soft clipping for better quality
+    value = fastPolyClip(value);
+    buffer_[writePos_] = floatToInt16(value);
+    writePos_++;
+    if (writePos_ >= COMB_BUFFER_SIZE) {
+        writePos_ = 0;
+    }
+}
+
+inline float CombFilter::processSample(float input) {
     // Handle excitation
     if (exciteCounter_ > 0) {
-        float noise = fastRandFloat(noiseState_) * exciteLevel_;
-        input += noise;
+        input += fastRandFloat(noiseState_) * exciteLevel_;
         exciteCounter_--;
     }
     
-    // Read with linear interpolation
-    float readPos = (float)writePos_ - delaySamples_;
-    if (readPos < 0.0f) readPos += (float)COMB_BUFFER_SIZE;
+    // Read delayed signal with selected interpolation
+    float delayed = 0.0f;
+    switch (interpType_) {
+        case InterpType::NONE:
+            delayed = readDelay(delaySamples_);
+            break;
+        case InterpType::LINEAR:
+            delayed = readDelayLinear(delaySamples_);
+            break;
+        case InterpType::LINEAR_FAST:
+            delayed = readDelayLinearFast(delaySamples_);
+            break;
+    }
     
-    int readIdx0 = (int)readPos;
-    int readIdx1 = readIdx0 + 1;
-    if (readIdx1 >= COMB_BUFFER_SIZE) readIdx1 -= COMB_BUFFER_SIZE;
-
-    float frac = readPos - (float)readIdx0;
-    
-    // Convert int16 to float
-    float s0 = buffer_[readIdx0] * 0.00003125f; // 1/32000
-    float s1 = buffer_[readIdx1] * 0.00003125f;
-    float delayed = s0 + frac * (s1 - s0);
-    
-    // Damping filter
-    if (damping_ > 0.0f) {
-        dampState_ = dampState_ * damping_ + delayed * (1.0f - damping_);
+    // Damping filter with precomputed values
+    if (damping_ > 0.001f) {
+        dampState_ = delayed * oneMinusDamping_ + dampState_ * damping_;
         delayed = dampState_;
     }
     
@@ -119,24 +208,35 @@ float CombFilter::process(float input) {
             toWrite = input;
             break;
             
-        case CombMode::ALLPASS:
-            output = delayed + allpassCoef_ * (input - delayed);
+        case CombMode::ALLPASS: {
+            float diff = input - delayed;
+            output = delayed + allpassCoef_ * diff;
             toWrite = input + feedback_ * delayed;
             break;
+        }
             
-        case CombMode::KARPLUS_STRONG:
+        case CombMode::KARPLUS_STRONG: {
             output = input + feedback_ * delayed;
             float averaged = (delayed + lastDelayed_) * 0.5f;
             lastDelayed_ = delayed;
             toWrite = input + feedback_ * averaged;
             break;
+        }
     }
     
-    // Soft clip and write
-    if (toWrite > 1.0f) toWrite = 1.0f;
-    if (toWrite < -1.0f) toWrite = -1.0f;
-    buffer_[writePos_] = (int16_t)(toWrite * 32000.0f);
-    writePos_ = (writePos_ + 1) % COMB_BUFFER_SIZE;
+    // Write to buffer
+    writeBuffer(toWrite);
     
-    return input * (1.0f - mix_) + output * mix_;
+    // Mix with precomputed factors
+    return input * oneMinusMix_ + output * mix_;
+}
+
+float CombFilter::process(float input) {
+    #ifdef DEBUG
+    if (isnan(input) || isinf(input)) {
+        return 0.0f;
+    }
+    #endif
+    
+    return processSample(input);
 }

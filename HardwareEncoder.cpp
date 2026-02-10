@@ -1,22 +1,43 @@
 #include "HardwareEncoder.h"
 
-// 4-state encoder logic
-const int8_t HardwareEncoder::KNOB_STATES[] = {
-    0, -1, 1, 0,
-    1, 0, 0, -1,
-    -1, 0, 0, 1,
-    0, 1, -1, 0
+// ISR routing: static instances for up to 2 encoders
+static HardwareEncoder* encoderInstances[2] = {nullptr, nullptr};
+static uint8_t encoderCount = 0;
+
+static void IRAM_ATTR encoderISR0() {
+    if (encoderInstances[0]) encoderInstances[0]->handleInterrupt();
+}
+static void IRAM_ATTR encoderISR1() {
+    if (encoderInstances[1]) encoderInstances[1]->handleInterrupt();
+}
+
+// Quadrature state transition table — MUST be in DRAM for ISR access!
+// Accessing flash from an IRAM_ATTR ISR causes LoadProhibited on ESP32.
+// Index = (oldState << 2) | newState, where state = (A << 1) | B
+static DRAM_ATTR const int8_t KNOB_DIR[] = {
+     0, -1,  1,  0,
+     1,  0,  0, -1,
+    -1,  0,  0,  1,
+     0,  1, -1,  0
 };
 
 HardwareEncoder::HardwareEncoder(uint8_t pinA, uint8_t pinB, uint8_t pinSW) :
     pinA_(pinA), pinB_(pinB), pinSW_(pinSW),
     state_(0), delta_(0),
-    lastSwState_(true), clicked_(false), lastDebounceTime_(0)
+    lastSwState_(true), clicked_(false), lastDebounceTime_(0),
+    instanceIndex_(-1), isrCount_(0)
 {
 }
 
 void HardwareEncoder::init() {
-    // GPIO 36 and 39 are input-only and don't have internal pullups on ESP32
+    // Register for ISR routing
+    if (encoderCount < 2) {
+        instanceIndex_ = encoderCount;
+        encoderInstances[encoderCount] = this;
+        encoderCount++;
+    }
+
+    // GPIO 36 and 39 are input-only, no internal pullups
     if (pinA_ == 36 || pinA_ == 39) {
         pinMode(pinA_, INPUT);
     } else {
@@ -29,34 +50,50 @@ void HardwareEncoder::init() {
         pinMode(pinB_, INPUT_PULLUP);
     }
 
-    pinMode(pinSW_, INPUT_PULLUP);
+    if (pinSW_ == 36 || pinSW_ == 39) {
+        pinMode(pinSW_, INPUT);
+    } else {
+        pinMode(pinSW_, INPUT_PULLUP);
+    }
 
-    // Initial state
-    uint8_t a = digitalRead(pinA_);
-    uint8_t b = digitalRead(pinB_);
-    state_ = (a << 1) | b;
+    // Read initial state
+    state_ = (digitalRead(pinA_) << 1) | digitalRead(pinB_);
+
+    // Attach interrupts on BOTH pins
+    void (*isr)() = nullptr;
+    if (instanceIndex_ == 0) isr = encoderISR0;
+    else if (instanceIndex_ == 1) isr = encoderISR1;
+
+    if (isr) {
+        attachInterrupt(digitalPinToInterrupt(pinA_), isr, CHANGE);
+        attachInterrupt(digitalPinToInterrupt(pinB_), isr, CHANGE);
+    }
+
+    Serial.printf("[Encoder %d] pins A=%d B=%d SW=%d, initial state=%d\n",
+                  instanceIndex_, pinA_, pinB_, pinSW_, state_);
+}
+
+void IRAM_ATTR HardwareEncoder::handleInterrupt() {
+    // All data accessed here MUST be in RAM (not flash):
+    // - KNOB_DIR: DRAM_ATTR ✓
+    // - state_, delta_, isrCount_: class members (heap/stack = RAM) ✓
+    // - digitalRead: IRAM-safe on ESP32 ✓
+    uint8_t newState = (digitalRead(pinA_) << 1) | digitalRead(pinB_);
+
+    if (newState != state_) {
+        delta_ += KNOB_DIR[(state_ << 2) | newState];
+        state_ = newState;
+    }
+    isrCount_++;
 }
 
 void HardwareEncoder::update() {
-    // 1. Encoder reading
-    uint8_t a = digitalRead(pinA_);
-    uint8_t b = digitalRead(pinB_);
-    uint8_t currentState = (a << 1) | b;
-
-    if (currentState != state_) {
-        // Index by [oldState][newState]
-        // oldState is state_, newState is currentState
-        // index = state_ * 4 + currentState
-        delta_ += KNOB_STATES[state_ * 4 + currentState];
-        state_ = currentState;
-    }
-
-    // 2. Switch reading (de-bounced)
+    // Encoder rotation handled by interrupts.
+    // Only switch debouncing here.
     bool sw = digitalRead(pinSW_);
     if (sw != lastSwState_) {
         if (millis() - lastDebounceTime_ > 50) {
             if (lastSwState_ && !sw) {
-                // Falling edge (pressed)
                 clicked_ = true;
             }
             lastSwState_ = sw;
@@ -66,17 +103,32 @@ void HardwareEncoder::update() {
 }
 
 int HardwareEncoder::getDelta() {
-    int d = delta_;
+    noInterrupts();
+    int32_t d = delta_;
     delta_ = 0;
-    // Encoders typically have 2 or 4 states per detent
-    // We'll normalize to 1 unit per 2-4 states if needed,
-    // but for now let's return raw state changes.
-    // Actually, usually it's /4 for full cycle.
-    if (abs(d) >= 2) {
-        int result = d / 2;
-        delta_ = d % 2;
+    interrupts();
+
+    if (d == 0) return 0;
+
+    // Most encoders: 4 state changes per detent (full quadrature cycle).
+    // Some cheap ones: 2 per detent. Try 4 first; if encoder feels sluggish,
+    // change to 2. If it's too sensitive, try 4.
+    const int STATES_PER_DETENT = 4;
+
+    if (abs(d) >= STATES_PER_DETENT) {
+        int result = d / STATES_PER_DETENT;
+        int remainder = d - (result * STATES_PER_DETENT);
+        // Put remainder back
+        noInterrupts();
+        delta_ += remainder;
+        interrupts();
         return result;
     }
+
+    // Not enough for a detent — put it all back
+    noInterrupts();
+    delta_ += d;
+    interrupts();
     return 0;
 }
 
@@ -88,4 +140,20 @@ bool HardwareEncoder::wasClicked() {
     bool c = clicked_;
     clicked_ = false;
     return c;
+}
+
+void HardwareEncoder::printDebug() {
+    uint8_t a = digitalRead(pinA_);
+    uint8_t b = digitalRead(pinB_);
+    bool sw = digitalRead(pinSW_);
+
+    noInterrupts();
+    int32_t d = delta_;
+    uint32_t isr = isrCount_;
+    interrupts();
+
+    Serial.printf("[Enc%d] A(pin%d)=%d  B(pin%d)=%d  SW(pin%d)=%d  "
+                  "state=%d  delta=%d  ISRs=%u\n",
+                  instanceIndex_, pinA_, a, pinB_, b, pinSW_, sw ? 1 : 0,
+                  state_, d, isr);
 }

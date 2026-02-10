@@ -21,6 +21,7 @@ enum class GrainSource : uint8_t {
     IMPULSE,        // Click/impulse (very short, sharp)
     TRIANGLE,       // Softer tonal
     DUST,           // Random impulses (sparse)
+    INPUT_BUFFER,   // Reads from circular input buffer (processor mode)
     NUM_SOURCES
 };
 
@@ -44,6 +45,7 @@ struct Grain {
     float position;     // 0-1 within grain duration
     float duration;     // In samples
     float invDuration;
+    uint16_t bufStartPos; // Start position in input buffer (for INPUT_BUFFER source)
     GrainSource source;
     GrainWindow window;
 };
@@ -81,16 +83,23 @@ public:
     GrainWindow getWindow() const { return window_; }
     bool isFreeRunning() const { return freeRunning_; }
     
-    // Process - returns sum of all active grains
+    // Process - returns sum of all active grains (exciter mode)
     float process();
+    
+    // Process with input - grains sample from a circular input buffer (processor mode)
+    float process(float input);
     
     // Get number of active grains (for visualization)
     int getActiveGrainCount() const;
+    
+    void setGranularMix(float mix) { granularMix_ = constrain(mix, 0.0f, 1.0f); }
+    float getGranularMix() const { return granularMix_; }
     
     void reset();
 
 private:
     void spawnGrain();
+    void spawnGrain(bool useInputBuffer);
     
     // Parameters
     float density_;
@@ -99,12 +108,18 @@ private:
     float basePitch_;
     float pitchSpread_;
     float amplitude_;
+    float granularMix_;
     GrainSource source_;
     GrainWindow window_;
     bool freeRunning_;
     
     // Grain pool
     Grain grains_[MAX_GRAINS];
+    
+    // Input buffer for processor mode (circular, ~21ms at 48kHz)
+    static constexpr uint16_t INPUT_BUF_SIZE = 1024;
+    float inputBuffer_[INPUT_BUF_SIZE];
+    uint16_t inputWritePos_;
     
     // Window tables
     static float hannTable_[WINDOW_TABLE_SIZE];

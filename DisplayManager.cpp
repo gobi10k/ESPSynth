@@ -318,7 +318,11 @@ void DisplayManager::drawEffectsPage() {
     display_.drawStr(55, 46, fx.isDelayEnabled() ? "ON" : "OFF");
 
     display_.drawStr(0, 58, selectedItem_ == 3 ? "> REVERB:" : "  REVERB:");
-    display_.drawStr(60, 58, engine_->getReverb().isEnabled() ? "ON" : "OFF");
+    if (engine_->getReverb().isFrozen()) {
+        display_.drawStr(60, 58, "FREEZE");
+    } else {
+        display_.drawStr(60, 58, engine_->getReverb().isEnabled() ? "ON" : "OFF");
+    }
 }
 
 void DisplayManager::drawSDPage() {

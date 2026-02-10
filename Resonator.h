@@ -100,9 +100,8 @@ private:
     float na1_[MAX_RESONATORS], na2_[MAX_RESONATORS];
     std::atomic<bool> dirty_;
 
-    // Biquad state per resonator
+    // Biquad state per resonator (Direct Form II Transposed)
     float x1_[MAX_RESONATORS], x2_[MAX_RESONATORS];
-    float y1_[MAX_RESONATORS], y2_[MAX_RESONATORS];
     
     // Brightness filter (one-pole lowpass on output)
     float brightnessCoef_;
