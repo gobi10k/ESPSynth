@@ -39,34 +39,34 @@ void SynthesisTests::runAll() {
     Serial.println("========================================\n");
 
     Serial.println("--- Unit Tests ---");
-    testOscillator();
-    testFilter();
-    testMoogFilter();
-    testEnvelope();
-    testFM();
-    testSync();
-    testRingMod();
-    testModMatrix();
+    testOscillator(); vTaskDelay(10);
+    testFilter(); vTaskDelay(10);
+    testMoogFilter(); vTaskDelay(10);
+    testEnvelope(); vTaskDelay(10);
+    testFM(); vTaskDelay(10);
+    testSync(); vTaskDelay(10);
+    testRingMod(); vTaskDelay(10);
+    testModMatrix(); vTaskDelay(10);
 
     Serial.println("\n--- Stability Stress Tests (100k samples) ---");
-    testSaturationStress();
-    testChorusStress();
-    testReverbStress();
-    testResonatorStress();
-    testCombStress();
-    testGranularStress();
+    testSaturationStress(); vTaskDelay(10);
+    testChorusStress(); vTaskDelay(10);
+    testReverbStress(); vTaskDelay(10);
+    testResonatorStress(); vTaskDelay(10);
+    testCombStress(); vTaskDelay(10);
+    testGranularStress(); vTaskDelay(10);
 
     Serial.println("\n--- NEW: Crash Diagnostic Tests ---");
-    testMemoryPressure();
-    testTimingBudget();
-    testFullChainWorstCase();
-    testNaNPropagation();
-    testVoiceLifecycle();
-    testFeedbackAccumulation();
-    testGranularProcessor();
-    testReverbFreeze();
-    testResonatorProfiles();
-    testSpectralStability();
+    testMemoryPressure(); vTaskDelay(10);
+    testTimingBudget(); vTaskDelay(10);
+    testFullChainWorstCase(); vTaskDelay(10);
+    testNaNPropagation(); vTaskDelay(10);
+    testVoiceLifecycle(); vTaskDelay(10);
+    testFeedbackAccumulation(); vTaskDelay(10);
+    testGranularProcessor(); vTaskDelay(10);
+    testReverbFreeze(); vTaskDelay(10);
+    testResonatorProfiles(); vTaskDelay(10);
+    testSpectralStability(); vTaskDelay(10);
 
     Serial.println("\n========================================");
     Serial.println("   ALL TESTS COMPLETED");
@@ -685,7 +685,10 @@ void SynthesisTests::testFeedbackAccumulation() {
 
         float maxAbs = 0.0f;
         for (int i = 0; i < 100000; i++) {
-            if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
             float in = (i % 48000 == 0) ? 1.0f : 0.0f;
             float out = rb.process(in);
             if (isnan(out) || isinf(out)) {
@@ -714,7 +717,10 @@ void SynthesisTests::testFeedbackAccumulation() {
 
         float maxAbs = 0.0f;
         for (int i = 0; i < 100000; i++) {
-            if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
             float in = (i == 0) ? 1.0f : 0.0f;
             float out = cb.process(in);
             if (isnan(out) || isinf(out)) {
@@ -746,7 +752,10 @@ void SynthesisTests::testFeedbackAccumulation() {
         rv.setMix(0.5f);
 
         for (int i = 0; i < 100000; i++) {
-            if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
             float in = (i % 48000 == 0) ? 0.5f : 0.0f;
             float x = rb.process(in);
             x = cb.process(x);
@@ -944,7 +953,10 @@ void SynthesisTests::testReverbStress() {
 
     bool passed = true;
     for (int i = 0; i < 100000; i++) {
-        if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
         float in = (i % 48000 == 0) ? 1.0f : 0.0f;
         float out = rv->process(in);
         if (isnan(out) || isinf(out)) {
@@ -966,7 +978,10 @@ void SynthesisTests::testResonatorStress() {
 
     bool passed = true;
     for (int i = 0; i < 100000; i++) {
-        if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
         float in = (float)rand() / RAND_MAX * 0.1f;
         float out = rb->process(in);
         if (isnan(out) || isinf(out) || fabsf(out) > 10.0f) {
@@ -987,7 +1002,10 @@ void SynthesisTests::testCombStress() {
 
     bool passed = true;
     for (int i = 0; i < 100000; i++) {
-        if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
         float in = (i == 0) ? 1.0f : 0.0f;
         float out = cb->process(in);
         if (isnan(out) || isinf(out)) {
@@ -1008,7 +1026,10 @@ void SynthesisTests::testGranularStress() {
 
     bool passed = true;
     for (int i = 0; i < 100000; i++) {
-        if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
         float out = ge->process();
         if (isnan(out) || isinf(out)) {
             passed = false;
@@ -1027,7 +1048,10 @@ void SynthesisTests::testSaturationStress() {
 
     bool passed = true;
     for (int i = 0; i < 100000; i++) {
-        if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
         float in = (float)rand() / RAND_MAX * 10.0f;
         float out = sat->process(in);
         if (isnan(out) || isinf(out)) {
@@ -1047,7 +1071,10 @@ void SynthesisTests::testChorusStress() {
 
     bool passed = true;
     for (int i = 0; i < 100000; i++) {
-        if ((i & 0x3FF) == 0) esp_task_wdt_reset();
+        if ((i & 0x3FF) == 0) {
+            esp_task_wdt_reset();
+            yield();
+        }
         float in = (float)rand() / RAND_MAX;
         float out = cho->process(in);
         if (isnan(out) || isinf(out)) {

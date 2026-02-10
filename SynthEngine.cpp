@@ -69,6 +69,13 @@ SynthEngine::SynthEngine() :
 bool SynthEngine::init() {
     Wavetables::init();
 
+    // Reconfigure Task Watchdog for heavy synthesis load
+    esp_task_wdt_config_t twdt_config = {
+        .timeout_ms = 5000,
+        .idle_core_mask = (1 << 0) | (1 << 1),    // Watch both cores
+        .trigger_proactive = true
+    };
+    esp_task_wdt_reconfigure(&twdt_config);
     
     // Modern I2S API Configuration
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
