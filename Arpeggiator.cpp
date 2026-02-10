@@ -213,7 +213,7 @@ bool Arpeggiator::process() {
         
         currentNote_ = getNextNote();
         
-        // Get velocity safely
+        // Get velocity safely — use stepIndex_ BEFORE advanceStep() modifies it
         int velIdx = stepIndex_ % numHeld_;
         if (velIdx < 0) velIdx = 0;
         if (velIdx >= ARP_MAX_NOTES) velIdx = ARP_MAX_NOTES - 1;

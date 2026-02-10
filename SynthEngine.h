@@ -17,8 +17,13 @@
 #include "CombFilter.h"
 #include <driver/i2s_std.h>
 #include <atomic>
+#include <functional>
 
 constexpr uint8_t NUM_VOICES = 4;
+
+// MIDI output callback types (defined here to avoid circular dependency with MIDIHandler.h)
+using NoteOnCallback = std::function<void(uint8_t channel, uint8_t note, uint8_t velocity)>;
+using NoteOffCallback = std::function<void(uint8_t channel, uint8_t note)>;
 
 class AudioProfiler {
 public:
@@ -128,6 +133,9 @@ public:
     FilterMode getFilterMode() const { return pendingParams_.filterMode; }
     VoiceFilterType getFilterType() const { return pendingParams_.filterType; }
     float getFilterEnvAmount() const { return pendingParams_.filterEnvAmount; }
+    int8_t getOscCoarse(int osc) const { return pendingParams_.oscCoarse[osc]; }
+    float getOscSupersawDetune(int osc) const { return pendingParams_.oscSupersawDetune[osc]; }
+    float getPulseWidth(int osc) const { return pendingParams_.pulseWidth[osc]; }
     float getFilterEnvVelocity() const { return pendingParams_.filterEnvVelocity; }
     float getFilterKeyTracking() const { return pendingParams_.filterKeyTracking; }
     
@@ -140,9 +148,6 @@ public:
     float getGlideTime() const { return pendingParams_.glideTime; }
     void setLegato(bool legato);
     bool getLegato() const { return pendingParams_.legato; }
-    int8_t getOscCoarse(int osc) const { return pendingParams_.oscCoarse[osc]; }
-    float getOscSupersawDetune(int osc) const { return pendingParams_.oscSupersawDetune[osc]; }
-    float getPulseWidth(int osc) const { return pendingParams_.pulseWidth[osc]; }
 
     // LFOs
     LFO& getLFO(int index);
@@ -238,6 +243,9 @@ private:
     EuclideanSequencer euclideanSeq_;
     bool euclideanEnabled_;
     uint8_t euclideanNote_;
+    uint32_t eucGateCounter_ = 0;
+    bool eucGateOn_ = false;
+    uint32_t eucGateLength_ = SAMPLE_RATE / 10; // 100ms default gate
 
     // Global Resonator and Comb (single instances, post-mix)
     ResonatorBank resonator_;
@@ -271,6 +279,10 @@ private:
     i2s_chan_handle_t tx_handle_;
     AudioProfiler profiler_;
     int16_t blockBuffer_[DMA_BUFFER_SAMPLES * 2];
+
+    // DC blocker state (removes DC offset from filter feedback chains)
+    float dcBlockL_ = 0.0f, dcBlockR_ = 0.0f;
+    float dcInL_ = 0.0f, dcInR_ = 0.0f;
 
     // MIDI Output
     NoteOnCallback midiNoteOnCb_;

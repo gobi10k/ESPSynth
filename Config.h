@@ -84,7 +84,7 @@ constexpr uint8_t ENC1_SW_PIN = 15;
 
 // Encoder 2: Value adjustment
 constexpr uint8_t ENC2_A_PIN  = 14;
-constexpr uint8_t ENC2_B_PIN  = 12;
+constexpr uint8_t ENC2_B_PIN  = 2;
 constexpr uint8_t ENC2_SW_PIN = 13;
 
 // ============================================================================

@@ -8,25 +8,35 @@ public:
     HardwareEncoder(uint8_t pinA, uint8_t pinB, uint8_t pinSW);
 
     void init();
-    void update(); // Call in loop or use interrupts
+    void update(); // Call in loop (switch debounce only)
 
     int getDelta();
     bool isPressed();
     bool wasClicked();
 
+    // Called from ISR — must be public for static wrapper
+    void IRAM_ATTR handleInterrupt();
+
+    // Debug: print pin states and ISR counters to Serial
+    void printDebug();
+
 private:
     uint8_t pinA_, pinB_, pinSW_;
 
-    // Encoder state
-    uint8_t state_;
-    int delta_;
+    // Encoder state (ISR-accessed, must be volatile)
+    volatile uint8_t state_;
+    volatile int32_t delta_;
 
     // Switch state
     bool lastSwState_;
-    bool clicked_;
+    volatile bool clicked_;
     uint32_t lastDebounceTime_;
 
-    static const int8_t KNOB_STATES[];
+    // Instance index for ISR routing
+    int8_t instanceIndex_;
+
+    // Debug counters
+    volatile uint32_t isrCount_;
 };
 
 #endif

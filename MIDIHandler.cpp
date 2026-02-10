@@ -45,6 +45,31 @@ void MIDIHandler::sendCC(uint8_t cc, uint8_t value, uint8_t channel) {
 void MIDIHandler::process() {
     while (MIDISerial.available()) {
         uint8_t byte = MIDISerial.read();
+        rxCount_++;
+        
+        if (rawLog_) {
+            Serial.printf("[MIDI RAW] 0x%02X", byte);
+            if (byte & 0x80) {
+                // Status byte — decode type
+                uint8_t type = byte & 0xF0;
+                uint8_t ch = (byte & 0x0F) + 1;
+                const char* name = "???";
+                if (type == 0x80) name = "NoteOff";
+                else if (type == 0x90) name = "NoteOn";
+                else if (type == 0xA0) name = "PolyPres";
+                else if (type == 0xB0) name = "CC";
+                else if (type == 0xC0) name = "ProgChg";
+                else if (type == 0xD0) name = "ChanPres";
+                else if (type == 0xE0) name = "PitchBnd";
+                else if (byte >= 0xF8) { name = "RT"; ch = 0; }
+                else if (byte >= 0xF0) { name = "System"; ch = 0; }
+                if (ch > 0)
+                    Serial.printf(" (%s ch%d)", name, ch);
+                else
+                    Serial.printf(" (%s)", name);
+            }
+            Serial.println();
+        }
         
         // Real-time messages (can occur anywhere)
         if (byte >= 0xF8) {
@@ -107,6 +132,7 @@ void MIDIHandler::process() {
 }
 
 void MIDIHandler::parseMessage() {
+    msgCount_++;
     uint8_t type = runningStatus_ & 0xF0;
     uint8_t ch = (runningStatus_ & 0x0F) + 1;  // 1-16
     

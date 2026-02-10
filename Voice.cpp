@@ -58,9 +58,11 @@ void Voice::noteOn(uint8_t note, uint8_t velocity, bool glide) {
     svf_.setKeyFreq(targetFreq_);
     ladder_.setKeyFreq(targetFreq_);
     
-    if (glide || pitchSmooth_.getCurrent() == 0.0f) {
+    if (glide && pitchSmooth_.getCurrent() > 0.0f) {
+        // Glide from current pitch to new pitch
         pitchSmooth_.setTarget(targetFreq_);
     } else {
+        // Snap to new pitch immediately
         pitchSmooth_.setImmediate(targetFreq_);
     }
     
@@ -80,7 +82,8 @@ void Voice::forceOff() {
     state_ = VoiceState::FREE;
     ampEnv_.gate(false);
     filterEnv_.gate(false);
-    pitchSmooth_.setImmediate(0.0f);
+    // Don't zero the pitch smoother — leave it at last frequency
+    // so next noteOn with glide=false will snap correctly via setImmediate()
 }
 
 float Voice::process() {

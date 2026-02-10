@@ -48,9 +48,9 @@ public:
             }
 
             case EnvelopeStage::DECAY: {
-                float overshootTarget = sustainLevel_ * 0.95f - 0.01f;
+                float overshootTarget = max(sustainLevel_ * 0.95f - 0.01f, -0.001f);
                 currentValue_ += decayCoef_ * (overshootTarget - currentValue_);
-                if (currentValue_ <= sustainLevel_) {
+                if (currentValue_ <= sustainLevel_ + 0.001f) {
                     currentValue_ = sustainLevel_;
                     stage_ = EnvelopeStage::SUSTAIN;
                 }

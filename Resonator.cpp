@@ -97,7 +97,7 @@ void ResonatorBank::setMix(float mix) {
 void ResonatorBank::reset() {
     for (int i = 0; i < MAX_RESONATORS; i++) {
         x1_[i] = x2_[i] = 0.0f;
-        y1_[i] = y2_[i] = 0.0f;
+        x1_[i] = x2_[i] = 0.0f;
     }
     brightnessState_ = 0.0f;
 }
