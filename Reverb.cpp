@@ -111,7 +111,7 @@ float FDNReverb::process(float input) {
     return (l + r) * 0.5f;
 }
 
-void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
+void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR, bool liteMode) {
     if (!enabled_) {
         outL = inL;
         outR = inR;
@@ -133,32 +133,37 @@ void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
         return;
     }
 
-    // Input Diffusion (optimized inline)
-    // Diffusion 1
-    uint16_t readPos = diffPos1_ - 113;
-    readPos &= DIFF_MASK;  // Fast modulo with power of 2
-    float diff1 = diffBuf1_[readPos] * (1.0f/32768.0f);
-    float diffOut1 = -diffCoeff1_ * monoInput + diff1;
-    diffBuf1_[diffPos1_] = (int16_t)(constrain(monoInput + diffCoeff1_ * diffOut1, -1.0f, 1.0f) * 32767.0f);
-    diffPos1_ = (diffPos1_ + 1) & DIFF_MASK;
-    
-    // Diffusion 2
-    readPos = diffPos2_ - 199;
-    readPos &= DIFF_MASK;
-    float diff2 = diffBuf2_[readPos] * (1.0f/32768.0f);
-    float diffOut2 = -diffCoeff2_ * diffOut1 + diff2;
-    diffBuf2_[diffPos2_] = (int16_t)(constrain(diffOut1 + diffCoeff2_ * diffOut2, -1.0f, 1.0f) * 32767.0f);
-    diffPos2_ = (diffPos2_ + 1) & DIFF_MASK;
+    // Input Diffusion (Optimized)
+    const float inv32768 = 1.0f/32768.0f;
+    float diffOut2 = monoInput;
+
+    if (!liteMode) {
+        // Diffusion 1
+        uint16_t rp_d1 = (diffPos1_ - 113) & DIFF_MASK;
+        float diff1 = diffBuf1_[rp_d1] * inv32768;
+        float diffOut1 = -diffCoeff1_ * monoInput + diff1;
+        float toWriteD1 = monoInput + diffCoeff1_ * diffOut1;
+        if (toWriteD1 > 1.0f) toWriteD1 = 1.0f; else if (toWriteD1 < -1.0f) toWriteD1 = -1.0f;
+        diffBuf1_[diffPos1_] = (int16_t)(toWriteD1 * 32767.0f);
+        diffPos1_ = (diffPos1_ + 1) & DIFF_MASK;
+
+        // Diffusion 2
+        uint16_t rp_d2 = (diffPos2_ - 199) & DIFF_MASK;
+        float diff2 = diffBuf2_[rp_d2] * inv32768;
+        float toWriteD2 = diffOut1 + diffCoeff2_ * (-diffCoeff2_ * diffOut1 + diff2);
+        if (toWriteD2 > 1.0f) toWriteD2 = 1.0f; else if (toWriteD2 < -1.0f) toWriteD2 = -1.0f;
+        diffOut2 = -diffCoeff2_ * diffOut1 + diff2;
+        diffBuf2_[diffPos2_] = (int16_t)(toWriteD2 * 32767.0f);
+        diffPos2_ = (diffPos2_ + 1) & DIFF_MASK;
+    }
     
     monoInput = diffOut2;
 
-    // Pre-delay with optimized access
-    readPos = preDelayPos_ - preDelaySamples_;
-    readPos &= PREDELAY_MASK;
-    float preDelayed = preDelayBuffer_[readPos] * (1.0f/32768.0f);
+    // Pre-delay (Optimized)
+    uint16_t rp_pd = (preDelayPos_ - preDelaySamples_) & PREDELAY_MASK;
+    float preDelayed = preDelayBuffer_[rp_pd] * inv32768;
     
-    // Write to pre-delay buffer
-    preDelayBuffer_[preDelayPos_] = (int16_t)(monoInput * 32767.0f);
+    preDelayBuffer_[preDelayPos_] = (int16_t)(diffOut2 * 32767.0f);
     preDelayPos_ = (preDelayPos_ + 1) & PREDELAY_MASK;
     
     float preDelayedF = frozen_ ? 0.0f : preDelayed;
@@ -166,57 +171,69 @@ void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
     float currentDamping = frozen_ ? 0.0f : damping_;
     float currentDampCoef = frozen_ ? 1.0f : dampingCoef_;
     
-    // Read from delay lines with optimized access
+    // Read from delay lines (Unrolled)
+    const float inv32768 = 1.0f/32768.0f;
     float outputs[4];
-    uint32_t rp[4];
     
-    // Calculate all read positions first
-    for (int i = 0; i < 4; i++) {
-        rp[i] = writePos_[i] - delayTimes_[i];
-        rp[i] &= DELAY_MASK;
-    }
-    
-    // Process all delay lines
-    for (int i = 0; i < 4; i++) {
-        float delayed = delayLines_[i][rp[i]] * (1.0f/32768.0f);
-        dampState_[i] = dampState_[i] * currentDamping + delayed * currentDampCoef;
-        outputs[i] = dampState_[i];
-    }
-    
-    // Optimized Hadamard mixing (reduced operations)
-    float sum01 = outputs[0] + outputs[1];
-    float sum23 = outputs[2] + outputs[3];
-    float diff01 = outputs[0] - outputs[1];
-    float diff23 = outputs[2] - outputs[3];
+    uint32_t rp0 = (writePos_[0] - delayTimes_[0]) & DELAY_MASK;
+    float d0 = delayLines_[0][rp0] * inv32768;
+    dampState_[0] = dampState_[0] * currentDamping + d0 * currentDampCoef;
+    outputs[0] = dampState_[0];
+
+    uint32_t rp1 = (writePos_[1] - delayTimes_[1]) & DELAY_MASK;
+    float d1 = delayLines_[1][rp1] * inv32768;
+    dampState_[1] = dampState_[1] * currentDamping + d1 * currentDampCoef;
+    outputs[1] = dampState_[1];
+
+    uint32_t rp2 = (writePos_[2] - delayTimes_[2]) & DELAY_MASK;
+    float d2 = delayLines_[2][rp2] * inv32768;
+    dampState_[2] = dampState_[2] * currentDamping + d2 * currentDampCoef;
+    outputs[2] = dampState_[2];
+
+    uint32_t rp3 = (writePos_[3] - delayTimes_[3]) & DELAY_MASK;
+    float d3 = delayLines_[3][rp3] * inv32768;
+    dampState_[3] = dampState_[3] * currentDamping + d3 * currentDampCoef;
+    outputs[3] = dampState_[3];
+
+    // Optimized Hadamard mixing (Unrolled)
+    float s01 = outputs[0] + outputs[1];
+    float s23 = outputs[2] + outputs[3];
+    float d01 = outputs[0] - outputs[1];
+    float d23 = outputs[2] - outputs[3];
+
+    float m[4];
+    m[0] = (s01 + s23) * 0.5f;
+    m[1] = (d01 + d23) * 0.5f;
+    m[2] = (s01 - s23) * 0.5f;
+    m[3] = (d01 - d23) * 0.5f;
     
     // Write back with feedback
     float feedbackInput = preDelayedF * inputGain_;
     
-    for (int i = 0; i < 4; i++) {
-        float mix;
-        switch (i) {
-            case 0: mix = (sum01 + sum23) * 0.5f; break;
-            case 1: mix = (diff01 + diff23) * 0.5f; break;
-            case 2: mix = (sum01 - sum23) * 0.5f; break;
-            case 3: mix = (diff01 - diff23) * 0.5f; break;
-        }
-        
-        float combined = mix * currentFeedback + feedbackInput;
-        // Fast clamping
-        combined = combined > 1.0f ? 1.0f : (combined < -1.0f ? -1.0f : combined);
-        delayLines_[i][writePos_[i]] = (int16_t)(combined * 32767.0f);
-        
-        writePos_[i] = (writePos_[i] + 1) & DELAY_MASK;
-    }
+    // Optimized Hadamard Mixing & Writeback (Unrolled)
+    float c0 = m[0] * currentFeedback + feedbackInput;
+    if (c0 > 1.0f) c0 = 1.0f; else if (c0 < -1.0f) c0 = -1.0f;
+    delayLines_[0][writePos_[0]] = (int16_t)(c0 * 32767.0f);
+    writePos_[0] = (writePos_[0] + 1) & DELAY_MASK;
+
+    float c1 = m[1] * currentFeedback + feedbackInput;
+    if (c1 > 1.0f) c1 = 1.0f; else if (c1 < -1.0f) c1 = -1.0f;
+    delayLines_[1][writePos_[1]] = (int16_t)(c1 * 32767.0f);
+    writePos_[1] = (writePos_[1] + 1) & DELAY_MASK;
+
+    float c2 = m[2] * currentFeedback + feedbackInput;
+    if (c2 > 1.0f) c2 = 1.0f; else if (c2 < -1.0f) c2 = -1.0f;
+    delayLines_[2][writePos_[2]] = (int16_t)(c2 * 32767.0f);
+    writePos_[2] = (writePos_[2] + 1) & DELAY_MASK;
+
+    float c3 = m[3] * currentFeedback + feedbackInput;
+    if (c3 > 1.0f) c3 = 1.0f; else if (c3 < -1.0f) c3 = -1.0f;
+    delayLines_[3][writePos_[3]] = (int16_t)(c3 * 32767.0f);
+    writePos_[3] = (writePos_[3] + 1) & DELAY_MASK;
     
     // Improved stereo output with subtle cross-feed
-    float wetL = outputs[0] * 0.6f + outputs[1] * 0.4f;
-    float wetR = outputs[2] * 0.4f + outputs[3] * 0.6f;
-    
-    // Add subtle cross-feed for more realistic stereo image
-    float cross = 0.15f;
-    wetL += outputs[2] * cross;
-    wetR += outputs[0] * cross;
+    float wetL = outputs[0] * 0.6f + outputs[1] * 0.4f + outputs[2] * 0.15f;
+    float wetR = outputs[2] * 0.4f + outputs[3] * 0.6f + outputs[0] * 0.15f;
     
     // Wet/dry mix with optimized calculation
     float wetMix = mix_;

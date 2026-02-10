@@ -55,18 +55,22 @@ void Delay::processStereo(float& left, float& right) {
     float readPosF = (float)writePos_ - delaySamples_;
     if (readPosF < 0) readPosF += MAX_DELAY_SAMPLES;
     
+    const float inv32767 = 1.0f / 32767.0f;
     int rp0 = (int)readPosF;
     int rp1 = (rp0 + 1) % MAX_DELAY_SAMPLES;
     float frac = readPosF - (float)rp0;
 
-    float delayedL = (bufferL_[rp0] * (1.0f - frac) + bufferL_[rp1] * frac) / 32767.0f;
-    float delayedR = (bufferR_[rp0] * (1.0f - frac) + bufferR_[rp1] * frac) / 32767.0f;
+    float delayedL = (bufferL_[rp0] + frac * (bufferL_[rp1] - bufferL_[rp0])) * inv32767;
+    float delayedR = (bufferR_[rp0] + frac * (bufferR_[rp1] - bufferR_[rp0])) * inv32767;
 
     float toWriteL = left + delayedL * feedback_;
     float toWriteR = right + delayedR * feedback_;
 
-    bufferL_[writePos_] = (int16_t)(constrain(toWriteL, -1.0f, 1.0f) * 32767.0f);
-    bufferR_[writePos_] = (int16_t)(constrain(toWriteR, -1.0f, 1.0f) * 32767.0f);
+    if (toWriteL > 1.0f) toWriteL = 1.0f; else if (toWriteL < -1.0f) toWriteL = -1.0f;
+    if (toWriteR > 1.0f) toWriteR = 1.0f; else if (toWriteR < -1.0f) toWriteR = -1.0f;
+
+    bufferL_[writePos_] = (int16_t)(toWriteL * 32767.0f);
+    bufferR_[writePos_] = (int16_t)(toWriteR * 32767.0f);
 
     writePos_++;
     if (writePos_ >= MAX_DELAY_SAMPLES) writePos_ = 0;
@@ -213,9 +217,11 @@ void Chorus::processStereo(float& left, float& right) {
     float baseDelay = 0.007f * SAMPLE_RATE;
     float modAmount = depth_ * 0.003f * SAMPLE_RATE;
     
+    const float inv32000 = 1.0f / 32000.0f;
     auto readDelay = [&](int16_t* buf, float lfoVal) {
         float delaySamples = baseDelay + lfoVal * modAmount;
-        delaySamples = constrain(delaySamples, 1.0f, (float)CHORUS_BUFFER_SIZE - 2.0f);
+        if (delaySamples < 1.0f) delaySamples = 1.0f;
+        else if (delaySamples > (float)CHORUS_BUFFER_SIZE - 2.0f) delaySamples = (float)CHORUS_BUFFER_SIZE - 2.0f;
 
         float readPosF = (float)writePos_ - delaySamples;
         if (readPosF < 0.0f) readPosF += (float)CHORUS_BUFFER_SIZE;
@@ -224,7 +230,7 @@ void Chorus::processStereo(float& left, float& right) {
         int readPos1 = (readPos0 + 1) % CHORUS_BUFFER_SIZE;
         float frac = readPosF - (float)readPos0;
 
-        return (buf[readPos0] * (1.0f - frac) + buf[readPos1] * frac) / 32000.0f;
+        return (buf[readPos0] + frac * (buf[readPos1] - buf[readPos0])) * inv32000;
     };
 
     float delayedL = readDelay(bufferL_, lfoL);

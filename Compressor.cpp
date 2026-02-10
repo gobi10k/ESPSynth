@@ -69,11 +69,13 @@ void Compressor::processStereo(float inL, float inR, float& outL, float& outR) {
         return;
     }
 
-    if (isnan(inL) || isinf(inL)) inL = 0.0f;
-    if (isnan(inR) || isinf(inR)) inR = 0.0f;
+    if (SAFE_CHECK(inL)) inL = 0.0f;
+    if (SAFE_CHECK(inR)) inR = 0.0f;
     
-    // Get input level (sidechain: max of L/R)
-    float inputAbs = max(fabsf(inL), fabsf(inR));
+    // Get input level (sidechain: max of abs L/R)
+    float aL = fabsf(inL);
+    float aR = fabsf(inR);
+    float inputAbs = aL > aR ? aL : aR;
     
     // Convert to dB using fast log2
     float inputDb = (inputAbs > 0.00001f) ? 6.0206f * fastLog2(inputAbs) : -100.0f;
@@ -101,7 +103,8 @@ void Compressor::processStereo(float inL, float inR, float& outL, float& outR) {
     
     gainReductionDb_ = envelope_;
     
-    // Apply gain reduction
+    // Apply gain reduction (using pre-calculated log-to-lin factor)
+    // 0.115129f is ln(10)/20
     float gainLin = fastExp(-envelope_ * 0.115129f) * makeupGain_;
     
     outL = inL * gainLin;

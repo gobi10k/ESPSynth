@@ -191,10 +191,11 @@ float LadderFilter::process(float input) {
     float feedback = resonance_ * 3.5f;
     float in = input * drive_;
     
-    in = fastTanh(in * 0.5f) * 1.5f;
+    // Faster saturation for internal ladder path
+    in = fastPolyClip(in * 0.5f) * 1.2f;
     
     float fb = delay_[3] * feedback;
-    fb = fastTanh(fb * 0.5f);
+    fb = fastPolyClip(fb * 0.5f);
     in -= fb;
     
     // Four stages - unrolled

@@ -3,6 +3,7 @@
 #include "MathUtils.h"
 #include <driver/i2s_std.h>
 #include <math.h>
+#include <esp_task_wdt.h>
 
 SynthEngine::SynthEngine() :
     pitchBendRange_(2),
@@ -429,9 +430,10 @@ void SynthEngine::processBlock() {
         }
     }
 
-    // CPU overload protection: if last block exceeded 95%, skip expensive effects
+    // CPU overload protection
     float cpuLoad = profiler_.getCPUPercent();
-    bool cpuOverload = (cpuLoad > 95.0f);
+    bool cpuOverload = (cpuLoad > 92.0f);
+    bool extremeOverload = (cpuLoad > 98.0f);
 
     // Massive CPU optimization: Move slow modulation out of the sample loop
     float lfo1 = lfos_[0].process(DMA_BUFFER_SAMPLES);
@@ -573,13 +575,24 @@ void SynthEngine::processBlock() {
         // Process global effects in stereo
         effects_.processStereo(left, right);
 
-        // Reverb - stereo processing
+        // Reverb - stereo processing (skip under extreme overload to prevent crash)
         float wetL, wetR;
-        reverb_.processStereo(left, right, wetL, wetR);
+        if (extremeOverload) {
+            wetL = left;
+            wetR = right;
+        } else {
+            // Use liteMode (no diffusion) if CPU is high
+            reverb_.processStereo(left, right, wetL, wetR, cpuOverload);
+        }
 
         // Compressor on stereo (before master volume and soft clip)
         float compL, compR;
-        compressor_.processStereo(wetL, wetR, compL, compR);
+        if (extremeOverload) {
+            compL = wetL;
+            compR = wetR;
+        } else {
+            compressor_.processStereo(wetL, wetR, compL, compR);
+        }
 
         // Master volume
         float vol = masterVolume_.process();
@@ -601,6 +614,7 @@ void SynthEngine::processBlock() {
     // Feed watchdog — essential to prevent crash under high CPU load
     // vTaskDelay(0) yields to other tasks without unnecessary 1ms wait
     vTaskDelay(0);
+    esp_task_wdt_reset();
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {
