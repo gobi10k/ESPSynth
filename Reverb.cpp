@@ -172,7 +172,6 @@ void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR, bo
     float currentDampCoef = frozen_ ? 1.0f : dampingCoef_;
     
     // Read from delay lines (Unrolled)
-    const float inv32768 = 1.0f/32768.0f;
     float outputs[4];
     
     uint32_t rp0 = (writePos_[0] - delayTimes_[0]) & DELAY_MASK;
