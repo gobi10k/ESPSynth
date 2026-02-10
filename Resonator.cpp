@@ -167,8 +167,8 @@ float ResonatorBank::process(float input) {
         resonated += processResonator(i, input) * gains_[i];
     }
     
-    // Normalize and filter - boosted scaling for noticeability
-    resonated *= 0.6f;
+    // Normalize and filter - balanced for headroom
+    resonated *= 0.25f;
     brightnessState_ += brightnessCoef_ * (resonated - brightnessState_);
     
     // Output limiting to prevent explosion at high Q

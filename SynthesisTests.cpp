@@ -13,6 +13,7 @@
 #include "Voice.h"
 #include "Compressor.h"
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 
 // Helper: time N iterations of a lambda, return microseconds per iteration
 template<typename F>
@@ -318,6 +319,12 @@ void SynthesisTests::testFullChainWorstCase() {
 
     for (int block = 0; block < numBlocks; block++) {
         uint32_t t0 = micros();
+
+        // Feed watchdog every few blocks
+        if (block % 10 == 0) {
+            esp_task_wdt_reset();
+            vTaskDelay(1);
+        }
 
         for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
             float left = 0.0f, right = 0.0f;
@@ -631,6 +638,7 @@ void SynthesisTests::testSpectralStability() {
 
     bool passed = true;
     for (float f = 100.0f; f < 2000.0f; f += 200.0f) {
+        esp_task_wdt_reset();
         rb.setFrequency(f);
         for (int i = 0; i < 1000; i++) {
             float in = fastRandFloat01(*(uint32_t*)&f); // Pseudo-random

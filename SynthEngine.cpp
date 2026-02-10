@@ -431,10 +431,16 @@ void SynthEngine::processBlock() {
         }
     }
 
-    // CPU overload protection
+    // CPU overload protection with Hysteresis
     float cpuLoad = profiler_.getCPUPercent();
-    bool cpuOverload = (cpuLoad > 92.0f);
-    bool extremeOverload = (cpuLoad > 98.0f);
+    if (cpuLoad > 95.0f) {
+        if (lodCounter_ < 60) lodCounter_++;
+    } else if (cpuLoad < 85.0f) {
+        if (lodCounter_ > 0) lodCounter_--;
+    }
+
+    bool cpuOverload = (lodCounter_ > 15);      // Lite Reverb
+    bool extremeOverload = (lodCounter_ > 45);  // Skip Reverb/Comp
 
     // Massive CPU optimization: Move slow modulation out of the sample loop
     float lfo1 = lfos_[0].process(DMA_BUFFER_SAMPLES);
@@ -537,9 +543,9 @@ void SynthEngine::processBlock() {
             right += s * voices_[3].getPanR();
         }
         
-        // Scale down for mixing (1.0 / sqrt(NUM_VOICES))
-        left *= 0.5f;
-        right *= 0.5f;
+        // Scale down for mixing (prevent clipping with 4 voices)
+        left *= 0.35f;
+        right *= 0.35f;
 
         // DC blocker (Moved up to clean signal before global effects)
         dcBlockL_ = left - dcInL_ + 0.9975f * dcBlockL_;
@@ -600,9 +606,9 @@ void SynthEngine::processBlock() {
         left = compL * vol;
         right = compR * vol;
         
-        // Final soft clip / limiter - use tanh for gentle saturation
-        left = fastTanh(left);
-        right = fastTanh(right);
+        // Final soft clip / limiter - reduced drive for better headroom
+        left = fastTanh(left * 0.85f);
+        right = fastTanh(right * 0.85f);
         
         blockBuffer_[i * 2] = (int16_t)(left * 32767.0f);
         blockBuffer_[i * 2 + 1] = (int16_t)(right * 32767.0f);
