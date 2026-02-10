@@ -72,8 +72,7 @@ bool SynthEngine::init() {
     // Reconfigure Task Watchdog for heavy synthesis load
     esp_task_wdt_config_t twdt_config = {
         .timeout_ms = 5000,
-        .idle_core_mask = (1 << 0) | (1 << 1),    // Watch both cores
-        .trigger_proactive = true
+        .idle_core_mask = (1 << 0) | (1 << 1)     // Watch both cores
     };
     esp_task_wdt_reconfigure(&twdt_config);
     
