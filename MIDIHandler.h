@@ -94,6 +94,7 @@ private:
     uint8_t dataBytes_[2];
     uint8_t dataIndex_;
     uint8_t expectedLength_;
+    bool skippingSysEx_;
     
     // Callbacks
     NoteOnCallback noteOnCb_;

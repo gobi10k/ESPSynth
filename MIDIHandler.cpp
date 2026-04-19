@@ -8,7 +8,8 @@ MIDIHandler::MIDIHandler() :
     channel_(0),  // Omni
     runningStatus_(0),
     dataIndex_(0),
-    expectedLength_(0)
+    expectedLength_(0),
+    skippingSysEx_(false)
 {
 }
 
@@ -25,7 +26,7 @@ void MIDIHandler::process() {
     while (MIDISerial.available()) {
         uint8_t byte = MIDISerial.read();
         
-        // Real-time messages (can occur anywhere)
+        // Real-time messages (0xF8–0xFF) pass through even inside SysEx.
         if (byte >= 0xF8) {
             switch (byte) {
                 case 0xF8:  // Timing clock
@@ -34,17 +35,35 @@ void MIDIHandler::process() {
                 case 0xFA:  // Start
                 case 0xFB:  // Continue
                 case 0xFC:  // Stop
-                    // Could add callbacks for these
                     break;
             }
             continue;
         }
-        
+
+        // SysEx: swallow all bytes from 0xF0 to matching 0xF7.
+        if (byte == 0xF0) {
+            skippingSysEx_ = true;
+            runningStatus_ = 0;
+            continue;
+        }
+        if (skippingSysEx_) {
+            if (byte == 0xF7) {
+                skippingSysEx_ = false;
+                runningStatus_ = 0;
+            }
+            continue;
+        }
+        // Orphan EOX (no preceding 0xF0) — reset parser state.
+        if (byte == 0xF7) {
+            runningStatus_ = 0;
+            continue;
+        }
+
         // Status byte?
         if (byte & 0x80) {
             runningStatus_ = byte;
             dataIndex_ = 0;
-            
+
             // Determine expected data length
             uint8_t type = byte & 0xF0;
             switch (type) {
