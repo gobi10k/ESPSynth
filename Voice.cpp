@@ -93,7 +93,7 @@ float Voice::process() {
         return 0.0f;
     }
     
-    age_++;
+    if (age_ < UINT32_MAX) age_++;
     
     // Smooth frequency only if needed
     float freq = targetFreq_;
