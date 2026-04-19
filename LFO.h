@@ -50,6 +50,7 @@ private:
     float lastValue_;
     float sampleHoldValue_;
     uint32_t lastSHPhase_;
+    uint32_t randState_;
 };
 
 #endif

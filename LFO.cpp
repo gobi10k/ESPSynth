@@ -11,7 +11,8 @@ LFO::LFO() :
     phaseIncrement_(0),
     lastValue_(0.0f),
     sampleHoldValue_(0.0f),
-    lastSHPhase_(0)
+    lastSHPhase_(0),
+    randState_(0xBEEF1234u + (uint32_t)(uintptr_t)this)
 {
     setFrequency(1.0f);
 }
@@ -76,7 +77,10 @@ float LFO::process(int samples) {
                 case LFOWaveform::SAMPLE_HOLD: {
                     uint32_t next = phase_ + phaseIncrement_;
                     if (next < phase_) {
-                        sampleHoldValue_ = ((float)rand() / RAND_MAX) * 2.0f - 1.0f;
+                        randState_ ^= randState_ << 13;
+                        randState_ ^= randState_ >> 17;
+                        randState_ ^= randState_ << 5;
+                        sampleHoldValue_ = (float)(int32_t)randState_ / (float)INT32_MAX;
                     }
                     value = sampleHoldValue_;
                     break;
@@ -108,7 +112,10 @@ float LFO::process(int samples) {
                 break;
             case LFOWaveform::SAMPLE_HOLD:
                 if (phase_ + phaseIncrement_ * (uint32_t)samples < phase_) {
-                    sampleHoldValue_ = ((float)rand() / RAND_MAX) * 2.0f - 1.0f;
+                    randState_ ^= randState_ << 13;
+                    randState_ ^= randState_ >> 17;
+                    randState_ ^= randState_ << 5;
+                    sampleHoldValue_ = (float)(int32_t)randState_ / (float)INT32_MAX;
                 }
                 value = sampleHoldValue_;
                 break;
