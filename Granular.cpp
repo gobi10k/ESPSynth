@@ -6,6 +6,7 @@
 const char* GRAIN_SOURCE_NAMES[] = {"NOI", "SIN", "IMP", "TRI", "DST"};
 
 float GranularExciter::hannTable_[WINDOW_TABLE_SIZE];
+float GranularExciter::expTable_[WINDOW_TABLE_SIZE];
 bool GranularExciter::tablesInitialized_ = false;
 
 GranularExciter::GranularExciter() :
@@ -29,6 +30,8 @@ GranularExciter::GranularExciter() :
     if (!tablesInitialized_) {
         for (int i = 0; i < WINDOW_TABLE_SIZE; i++) {
             hannTable_[i] = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (WINDOW_TABLE_SIZE - 1)));
+            float p = (float)i / (float)(WINDOW_TABLE_SIZE - 1);
+            expTable_[i] = expf(-4.0f * p) * (1.0f - expf(-20.0f * p));
         }
         tablesInitialized_ = true;
     }
@@ -128,7 +131,7 @@ float GranularExciter::getWindow(float position, GrainWindow window) {
             return 1.0f;
             
         case GrainWindow::EXPONENTIAL:
-            return expf(-4.0f * position) * (1.0f - expf(-20.0f * position));
+            return expTable_[idx];
             
         default:
             return 1.0f;

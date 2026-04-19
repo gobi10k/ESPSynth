@@ -114,8 +114,9 @@ private:
     // Grain pool
     Grain grains_[MAX_GRAINS];
     
-    // Window table
+    // Window tables (precomputed to avoid per-sample expf calls)
     static float hannTable_[WINDOW_TABLE_SIZE];
+    static float expTable_[WINDOW_TABLE_SIZE];
     static bool tablesInitialized_;
 
     // Timing
