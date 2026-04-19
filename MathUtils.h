@@ -2,6 +2,7 @@
 #define MATH_UTILS_H
 
 #include <Arduino.h>
+#include <string.h>
 
 #define TWO_PI 6.28318530717958647693f
 #define TWO_PI_INV_SR -0.00013089969f // -2 * PI / 48000
@@ -43,8 +44,9 @@ inline float fastTanh(float x) {
  * Fast log2 approximation
  */
 inline float fastLog2(float x) {
-    union { float f; uint32_t i; } vx = { x };
-    float y = (float)vx.i;
+    uint32_t bits;
+    memcpy(&bits, &x, sizeof(bits));
+    float y = (float)bits;
     y *= 1.1920928955078125e-7f;
     return y - 126.94269504f;
 }
