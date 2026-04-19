@@ -44,12 +44,12 @@ constexpr uint16_t WAVETABLE_SIZE    = 256;
 constexpr uint16_t WAVETABLE_MASK    = WAVETABLE_SIZE - 1;
 constexpr uint8_t  WAVETABLE_BITS    = 8;   // log2(256)
 
-// 4 octave tables for practical range
-constexpr uint8_t  NUM_OCTAVE_TABLES = 4;
+// 6 octave tables: C2–C7
+constexpr uint8_t  NUM_OCTAVE_TABLES = 6;
 
-// Memory: 4 octaves × 3 waveforms × 256 samples × 4 bytes = 12,288 bytes
+// Memory: 6 octaves × 3 waveforms × 256 samples × 4 bytes = 18,432 bytes
 // Plus sine: 256 × 4 = 1,024 bytes
-// Total wavetables: ~13KB
+// Total wavetables: ~19KB
 
 // ============================================================================
 // SYNTH CONFIGURATION

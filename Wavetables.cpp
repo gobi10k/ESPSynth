@@ -98,8 +98,8 @@ namespace Wavetables {
             sinTable[i] = sinf((2.0f * M_PI * i) / WAVETABLE_SIZE);
         }
         
-        // 4 octave tables: C2, C3, C4, C5
-        float baseFreqs[NUM_OCTAVE_TABLES] = {65.4f, 130.8f, 261.6f, 523.3f};
+        // 6 octave tables: C2, C3, C4, C5, C6, C7
+        float baseFreqs[NUM_OCTAVE_TABLES] = {65.4f, 130.8f, 261.6f, 523.3f, 1046.5f, 2093.0f};
         
         for (int oct = 0; oct < NUM_OCTAVE_TABLES; oct++) {
             octaveFreqLimits[oct] = baseFreqs[oct] * 2.0f;
