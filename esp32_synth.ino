@@ -45,6 +45,11 @@ int selectedLFO = 0;
 bool autoStats = false;
 uint32_t lastHeartbeatBlock = 0;
 
+// Deferred MIDI program change: set in the MIDI callback, consumed in loop()
+// to avoid blocking the MIDI/clock path with NVS flash access (10-100 ms).
+volatile bool presetPending_ = false;
+volatile uint8_t pendingPresetProgram_ = 0;
+
 // ============================================================================
 // MIDI CALLBACKS
 // ============================================================================
@@ -140,10 +145,10 @@ void onMIDIPitchBend(uint8_t ch, int16_t val) {
 }
 
 void onMIDIProgramChange(uint8_t ch, uint8_t program) {
-    PresetData p;
-    if (presets.loadPreset(program, p)) {
-        applyPreset(p);
-    }
+    // Do not call loadPreset() here — NVS flash takes 10-100 ms and would
+    // starve the MIDI clock callback, overflowing the UART FIFO.
+    pendingPresetProgram_ = program;
+    presetPending_ = true;
 }
 
 void onMIDIClock() {
@@ -941,6 +946,16 @@ void loop() {
 
     // Process MIDI
     midi.process();
+
+    // Deferred preset load: NVS flash is done here, not in the MIDI callback,
+    // so MIDI clock ticks are not starved during a program-change message.
+    if (presetPending_) {
+        presetPending_ = false;
+        PresetData p;
+        if (presets.loadPreset(pendingPresetProgram_, p)) {
+            applyPreset(p);
+        }
+    }
     
     // Process serial commands
     if (Serial.available()) {
