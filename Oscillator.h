@@ -39,7 +39,7 @@ public:
 private:
     void updatePhaseIncrement();
     void updateEffectiveIncrements();
-    float generateSupersaw();
+    float generateSupersaw(uint32_t baseIncrement);
     float generateNoise();
     
     uint32_t phase_;
@@ -64,7 +64,6 @@ private:
     
     // Supersaw state (7 detuned saws)
     uint32_t supersawPhases_[7];
-    uint32_t effectiveSupersawIncrements_[7];
     
     // Noise state
     uint32_t noiseState_;

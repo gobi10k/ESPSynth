@@ -90,11 +90,6 @@ void Oscillator::updatePhaseIncrement() {
 
 void Oscillator::updateEffectiveIncrements() {
     effectiveIncrement_ = (uint32_t)(basePhaseIncrement_ * pitchMult_);
-    if (waveform_ == Waveform::SUPERSAW) {
-        for (int i = 0; i < 7; i++) {
-            effectiveSupersawIncrements_[i] = (uint32_t)(effectiveIncrement_ * SUPERSAW_MULT[i]);
-        }
-    }
 }
 
 void Oscillator::resetPhase() {
@@ -113,21 +108,18 @@ void Oscillator::sync() {
     phase_ = 0;
 }
 
-float Oscillator::generateSupersaw() {
-    // Safety check
-    if (effectiveIncrement_ == 0) return 0.0f;
+float Oscillator::generateSupersaw(uint32_t baseIncrement) {
+    if (baseIncrement == 0) return 0.0f;
     if (tableIndex_ < 0 || tableIndex_ >= NUM_OCTAVE_TABLES) {
         tableIndex_ = 0;
     }
-    
+
     float sum = 0.0f;
-    
     for (int i = 0; i < 7; i++) {
-        supersawPhases_[i] += effectiveSupersawIncrements_[i];
+        supersawPhases_[i] += (uint32_t)(baseIncrement * SUPERSAW_MULT[i]);
         sum += Wavetables::readSaw(supersawPhases_[i], tableIndex_);
     }
-    
-    return sum * 0.143f;  // 1/7 = 0.143
+    return sum * 0.143f;  // 1/7
 }
 
 float Oscillator::generateNoise() {
@@ -171,17 +163,17 @@ float Oscillator::process() {
         }
 
         case Waveform::SUPERSAW:
-            sample = generateSupersaw();
+            sample = generateSupersaw(effectiveIncrement_);
             break;
-            
+
         case Waveform::NOISE:
             sample = generateNoise();
             break;
-            
+
         default:
             sample = 0.0f;
     }
-    
+
     phase_ += effectiveIncrement_;
     return sample * amplitude_;
 }
@@ -226,7 +218,7 @@ float Oscillator::processWithFM(float fmInput, float fmAmount) {
             break;
         }
         case Waveform::SUPERSAW:
-            sample = generateSupersaw();
+            sample = generateSupersaw(effectiveIncrement);
             break;
         case Waveform::NOISE:
             sample = generateNoise();
