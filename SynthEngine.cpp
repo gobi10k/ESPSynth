@@ -328,9 +328,13 @@ void SynthEngine::setFilterKeyTracking(float amount) {
 
 void SynthEngine::setFilterType(VoiceFilterType type) {
     filterType_ = type;
+    // Critical section: ISR can preempt mid-iteration leaving some voices on
+    // the old type and some on the new — same race as arpeggiator sortNotes.
+    taskENTER_CRITICAL(&arpMux_);
     for (int i = 0; i < NUM_VOICES; i++) {
         voices_[i].setFilterType(type);
     }
+    taskEXIT_CRITICAL(&arpMux_);
 }
 
 void SynthEngine::setAmpADSR(float a, float d, float s, float r) {
