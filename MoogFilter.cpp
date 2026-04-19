@@ -186,9 +186,11 @@ void LadderFilter::reset() {
 }
 
 float LadderFilter::process(float input) {
-    // Safety check input
+    // Input guard at entry — must not enter state before this check.
     if (isnan(input) || isinf(input)) input = 0.0f;
-    
+    // State guard: delay_[3] feeds back into input; corrupt state must be cleared.
+    if (isnan(delay_[3]) || isinf(delay_[3])) reset();
+
     // Feedback - limit to prevent instability
     float feedback = resonance_ * 3.5f;  // Reduced from 4.0
     

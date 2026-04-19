@@ -59,6 +59,12 @@ void Filter::reset() {
 }
 
 float Filter::process(float input) {
+    // Guard at entry: NaN/Inf input must not be written into integrator state.
+    // Guard state: if state is already corrupt (e.g. from a prior NaN), reset
+    // so the voice can recover on subsequent samples rather than staying silent.
+    if (isnan(input) || isinf(input)) return 0.0f;
+    if (isnan(low_) || isinf(low_) || isnan(band_) || isinf(band_)) reset();
+
     // State variable filter iteration (2x oversampled for stability)
     for (int i = 0; i < 2; i++) {
         low_ += fMod_ * band_;
