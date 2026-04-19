@@ -62,6 +62,7 @@ public:
 
 private:
     float drive_;
+    float bitcrushScale_;  // cached powf(2, 16/drive_), updated in setDrive()
     SaturationType type_;
     float mix_;
 };

@@ -70,6 +70,7 @@ float Delay::process(float input) {
 
 Saturation::Saturation() :
     drive_(1.0f),
+    bitcrushScale_(powf(2.0f, 16.0f)),  // drive_=1 → 16 bits
     type_(SaturationType::SOFT),
     mix_(1.0f)
 {
@@ -77,6 +78,7 @@ Saturation::Saturation() :
 
 void Saturation::setDrive(float drive) {
     drive_ = constrain(drive, 1.0f, 20.0f);
+    bitcrushScale_ = powf(2.0f, 16.0f / drive_);
 }
 
 void Saturation::setType(SaturationType type) {
@@ -118,10 +120,7 @@ float Saturation::process(float input) {
         }
             
         case SaturationType::BITCRUSH: {
-            // Reduce bit depth
-            float bits = 16.0f / drive_;  // More drive = fewer bits
-            float scale = powf(2.0f, bits);
-            saturated = roundf(driven * scale) / scale;
+            saturated = roundf(driven * bitcrushScale_) / bitcrushScale_;
             saturated = constrain(saturated, -1.0f, 1.0f);
             break;
         }
