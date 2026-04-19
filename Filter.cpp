@@ -72,7 +72,10 @@ float Filter::process(float input) {
         band_ += fMod_ * high_;
         notch_ = high_ + low_;
     }
-    
+    // Flush integrators to zero to avoid Xtensa LX6 denormal penalty in long tails
+    if (fabsf(low_)  < 1e-20f) low_  = 0.0f;
+    if (fabsf(band_) < 1e-20f) band_ = 0.0f;
+
     // Select output based on mode
     switch (mode_) {
         case FilterMode::LOWPASS:

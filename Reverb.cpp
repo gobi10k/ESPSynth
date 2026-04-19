@@ -114,8 +114,9 @@ void FDNReverb::processStereo(float input, float& left, float& right) {
 
         outputs[i] = delayLines_[i][readPos] / 32000.0f;
         
-        // Damping filter
+        // Damping filter — flush near-zero values to avoid Xtensa LX6 denormal penalty
         dampState_[i] = dampState_[i] * damping_ + outputs[i] * dampingCoef_;
+        if (fabsf(dampState_[i]) < 1e-20f) dampState_[i] = 0.0f;
         outputs[i] = dampState_[i];
     }
     
