@@ -138,12 +138,17 @@ void ResonatorBank::updateCoefficients() {
         na2_[i] = (1.0f - alpha) / a0;
     }
     
+    // Release fence: all nb*_ stores above must be visible to APP_CPU before
+    // dirty_ is seen as true. Required because the display task runs on PRO_CPU.
+    __atomic_thread_fence(__ATOMIC_RELEASE);
     dirty_ = true;
     setBrightness(brightness_);  // Update brightness filter
 }
 
 void ResonatorBank::applyDirtyCoefficients() {
     if (!dirty_) return;
+    // Acquire fence: nb*_ loads below see all stores from the PRO_CPU writer.
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
 
     for (int i = 0; i < MAX_RESONATORS; i++) {
         b0_[i] = nb0_[i];
