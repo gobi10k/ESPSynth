@@ -6,6 +6,7 @@
 const char* GRAIN_SOURCE_NAMES[] = {"NOI", "SIN", "IMP", "TRI", "DST"};
 
 float GranularExciter::hannTable_[WINDOW_TABLE_SIZE];
+float GranularExciter::blackmanTable_[WINDOW_TABLE_SIZE];
 float GranularExciter::expTable_[WINDOW_TABLE_SIZE];
 bool GranularExciter::tablesInitialized_ = false;
 
@@ -29,9 +30,11 @@ GranularExciter::GranularExciter() :
 
     if (!tablesInitialized_) {
         for (int i = 0; i < WINDOW_TABLE_SIZE; i++) {
-            hannTable_[i] = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (WINDOW_TABLE_SIZE - 1)));
-            float p = (float)i / (float)(WINDOW_TABLE_SIZE - 1);
-            expTable_[i] = expf(-4.0f * p) * (1.0f - expf(-20.0f * p));
+            float n = (float)i / (float)(WINDOW_TABLE_SIZE - 1);
+            hannTable_[i] = 0.5f * (1.0f - cosf(2.0f * M_PI * n));
+            blackmanTable_[i] = 0.42f - 0.5f * cosf(2.0f * M_PI * n)
+                                       + 0.08f * cosf(4.0f * M_PI * n);
+            expTable_[i] = expf(-4.0f * n) * (1.0f - expf(-20.0f * n));
         }
         tablesInitialized_ = true;
     }
@@ -121,8 +124,10 @@ float GranularExciter::getWindow(float position, GrainWindow window) {
 
     switch (window) {
         case GrainWindow::HANN:
-        case GrainWindow::BLACKMAN:
             return hannTable_[idx];
+
+        case GrainWindow::BLACKMAN:
+            return blackmanTable_[idx];
             
         case GrainWindow::TRIANGLE:
             return (position < 0.5f) ? (2.0f * position) : (2.0f * (1.0f - position));
