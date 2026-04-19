@@ -540,7 +540,11 @@ void SynthEngine::processBlock() {
     
     profiler_.endSample();
     size_t bytesWritten;
-    i2s_write(I2S_NUM_0, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
+    esp_err_t err = i2s_write(I2S_NUM_0, blockBuffer_, sizeof(blockBuffer_),
+                               &bytesWritten, pdMS_TO_TICKS(10));
+    if (err != ESP_OK || bytesWritten != sizeof(blockBuffer_)) {
+        i2sUnderrunCount_++;
+    }
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {

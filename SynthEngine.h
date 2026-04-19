@@ -171,9 +171,13 @@ public:
     float getGlobalPan() const { return globalPan_; }
     
     // Profiler
-    void printCPUStats() { profiler_.printStats(); }
+    void printCPUStats() {
+        profiler_.printStats();
+        Serial.printf("I2S underruns: %lu\n", i2sUnderrunCount_);
+    }
     float getCPUPercent() { return profiler_.getCPUPercent(); }
     uint32_t getBlockCount() const { return blockCounter_; }
+    uint32_t getI2SUnderrunCount() const { return i2sUnderrunCount_; }
 
     // Voice info
     uint8_t getActiveVoiceCount() const;
@@ -262,6 +266,7 @@ private:
     float currentVelocity_;
     volatile bool running_;
     volatile uint32_t blockCounter_ = 0;
+    uint32_t i2sUnderrunCount_ = 0;
     float voicePanL_[NUM_VOICES];
     float voicePanR_[NUM_VOICES];
     TaskHandle_t audioTaskHandle_;
