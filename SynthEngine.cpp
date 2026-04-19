@@ -448,6 +448,10 @@ void SynthEngine::processBlock() {
                     // Combine spread and global pan
                     float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
                     voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
+                    // Refresh pan coefficients now; block-start precompute used stale values.
+                    float arpPanAngle = (voices_[voice].getPan() + 1.0f) * 0.785398f;
+                    voicePanL_[voice] = cosf(arpPanAngle);
+                    voicePanR_[voice] = sinf(arpPanAngle);
 
                     currentVelocity_ = arp_.getCurrentVelocity() / 127.0f;
 
