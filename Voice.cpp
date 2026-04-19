@@ -78,7 +78,10 @@ void Voice::forceOff() {
     state_ = VoiceState::FREE;
     ampEnv_.gate(false);
     filterEnv_.gate(false);
-    pitchSmooth_.setImmediate(0.0f);
+    // Preserve the stolen note's pitch so the next noteOn() glides from here.
+    // Setting 0.0f would trigger the "first note" jump path in noteOn() and
+    // bypass glide on every steal.
+    pitchSmooth_.setImmediate(targetFreq_);
     // Reset filter integrator state so a resonant stolen voice does not
     // inject its accumulated energy (click/burst) into the new note's attack.
     svf_.reset();
