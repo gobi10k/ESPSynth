@@ -233,9 +233,11 @@ bool Arpeggiator::process() {
 
 void Arpeggiator::clockTick() {
     if (!externalClock_) return;
-    // 24 PPQN MIDI clock
+    // MIDI sends 24 PPQ. Steps per beat = division_/4, so clocks per step:
+    //   24 / (division_ / 4)  =  96 / division_
+    // e.g. quarter note (div=4): 24 clocks; 16th note (div=16): 6 clocks.
     clockCounter_++;
-    if (clockCounter_ >= (24 / division_)) {
+    if (clockCounter_ >= (96 / division_)) {
         clockCounter_ = 0;
         // Force next step
         sampleCounter_ = samplesPerStep_;
