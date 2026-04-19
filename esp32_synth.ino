@@ -245,6 +245,7 @@ PresetData createPresetFromCurrent(const char* name) {
 
 void setup() {
     Serial.begin(115200);
+    Serial.setTimeout(100);  // Prevent readStringUntil() blocking for 1 s default
     delay(1000);
     
     Serial.println("\n=== ESP32 Synth v5 - Resonant Spectral Engine ===\n");
