@@ -51,47 +51,7 @@ float LFO::process(int samples) {
     float value = 0.0f;
     const uint32_t phaseOffsetFixed = (uint32_t)(phaseOffset_ * (float)0xFFFFFFFF);
 
-    if (frequency_ > 5.0f) {
-        // Per-sample accumulation: phase steps one increment at a time so fast
-        // LFOs (vibrato, tremolo) track the sine correctly through the block.
-        // readSine() uses the 256-entry sinTable with linear interpolation.
-        for (int i = 0; i < samples; i++) {
-            uint32_t ep = phase_ + phaseOffsetFixed;
-            float t = ep * PHASE_TO_FLOAT;
-            switch (waveform_) {
-                case LFOWaveform::SINE:
-                    value = Wavetables::readSine(ep);
-                    break;
-                case LFOWaveform::TRIANGLE:
-                    value = Wavetables::readTriangle(ep, 2);
-                    break;
-                case LFOWaveform::SAW_UP:
-                    value = 2.0f * t - 1.0f;
-                    break;
-                case LFOWaveform::SAW_DOWN:
-                    value = 1.0f - 2.0f * t;
-                    break;
-                case LFOWaveform::SQUARE:
-                    value = (t < 0.5f) ? 1.0f : -1.0f;
-                    break;
-                case LFOWaveform::SAMPLE_HOLD: {
-                    uint32_t next = phase_ + phaseIncrement_;
-                    if (next < phase_) {
-                        randState_ ^= randState_ << 13;
-                        randState_ ^= randState_ >> 17;
-                        randState_ ^= randState_ << 5;
-                        sampleHoldValue_ = (float)(int32_t)randState_ / (float)INT32_MAX;
-                    }
-                    value = sampleHoldValue_;
-                    break;
-                }
-                default:
-                    value = 0.0f;
-            }
-            phase_ += phaseIncrement_;
-        }
-    } else {
-        // Block-rate: value at current phase, phase jumps the full block in one step.
+    for (int i = 0; i < samples; i++) {
         uint32_t ep = phase_ + phaseOffsetFixed;
         float t = ep * PHASE_TO_FLOAT;
         switch (waveform_) {
@@ -110,8 +70,9 @@ float LFO::process(int samples) {
             case LFOWaveform::SQUARE:
                 value = (t < 0.5f) ? 1.0f : -1.0f;
                 break;
-            case LFOWaveform::SAMPLE_HOLD:
-                if (phase_ + phaseIncrement_ * (uint32_t)samples < phase_) {
+            case LFOWaveform::SAMPLE_HOLD: {
+                uint32_t next = phase_ + phaseIncrement_;
+                if (next < phase_) {
                     randState_ ^= randState_ << 13;
                     randState_ ^= randState_ >> 17;
                     randState_ ^= randState_ << 5;
@@ -119,10 +80,11 @@ float LFO::process(int samples) {
                 }
                 value = sampleHoldValue_;
                 break;
+            }
             default:
                 value = 0.0f;
         }
-        phase_ += phaseIncrement_ * (uint32_t)samples;
+        phase_ += phaseIncrement_;
     }
 
     lastValue_ = value;
