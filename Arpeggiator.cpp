@@ -125,7 +125,7 @@ void Arpeggiator::sortNotes() {
 }
 
 uint8_t Arpeggiator::getNextNote() {
-    if (numHeld_ == 0) return 60;  // Return middle C as default
+    if (numHeld_ == 0) return currentNote_;  // Dead path (process() guards this); repeat last note
     
     int idx = 0;
     
