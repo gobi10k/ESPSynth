@@ -185,6 +185,11 @@ public:
         return 440.0f * powf(2.0f, (note - 69) / 12.0f);
     }
 
+#ifdef HOST_BUILD
+    void renderBlock() { processBlock(); }
+    const int16_t* getBlockBuffer() const { return blockBuffer_; }
+#endif
+
 private:
     void processBlock();
     int allocateVoice(uint8_t note);

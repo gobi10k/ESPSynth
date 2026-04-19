@@ -1,7 +1,12 @@
 #ifndef MATH_UTILS_H
 #define MATH_UTILS_H
 
+#ifndef HOST_BUILD
 #include <Arduino.h>
+#else
+#include <stdint.h>
+#include "host/platform.h"
+#endif
 #include <string.h>
 
 #define TWO_PI 6.28318530717958647693f

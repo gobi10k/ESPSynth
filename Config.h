@@ -1,7 +1,12 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#ifndef HOST_BUILD
 #include <Arduino.h>
+#else
+#include <stdint.h>
+#include "host/platform.h"
+#endif
 
 // ============================================================================
 // PIN DEFINITIONS
