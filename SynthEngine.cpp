@@ -166,7 +166,9 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
 
     // If arpeggiator is on, feed it instead
     if (arp_.getMode() != ArpMode::OFF) {
+        taskENTER_CRITICAL(&arpMux_);
         arp_.noteOn(note, velocity);
+        taskEXIT_CRITICAL(&arpMux_);
         return;
     }
     
@@ -203,7 +205,9 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
 
 void SynthEngine::noteOff(uint8_t note) {
     if (arp_.getMode() != ArpMode::OFF) {
+        taskENTER_CRITICAL(&arpMux_);
         arp_.noteOff(note);
+        taskEXIT_CRITICAL(&arpMux_);
         return;
     }
     
@@ -217,7 +221,9 @@ void SynthEngine::noteOff(uint8_t note) {
 }
 
 void SynthEngine::allNotesOff() {
+    taskENTER_CRITICAL(&arpMux_);
     arp_.allNotesOff();
+    taskEXIT_CRITICAL(&arpMux_);
     for (int i = 0; i < NUM_VOICES; i++) {
         voices_[i].forceOff();
     }

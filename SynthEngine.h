@@ -248,6 +248,16 @@ private:
     SmoothedValue masterVolume_;
     float globalPan_;
     
+    // Mutex protecting Arpeggiator note state (noteOn/noteOff/allNotesOff)
+    // against the audio task's per-sample arp_.process() reader.
+    // Both tasks are pinned to APP_CPU; the DMA-completion ISR can preempt
+    // the loop task mid-call (e.g. mid-sortNotes), so a critical section is
+    // required on the write side.
+    // NOTE: if ISR-side note injection is ever added (clock-pin IRQ, footswitch
+    // interrupt), the audio-side read path in processBlock() will also need
+    // this mux — do not add it there until that time.
+    portMUX_TYPE arpMux_ = portMUX_INITIALIZER_UNLOCKED;
+
     // Runtime
     float currentVelocity_;
     volatile bool running_;
