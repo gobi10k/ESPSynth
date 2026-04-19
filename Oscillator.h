@@ -69,8 +69,6 @@ private:
     // Noise state
     uint32_t noiseState_;
     
-    // Pulse filter state
-    float lastPulse_;
 };
 
 #endif

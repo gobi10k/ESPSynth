@@ -1,6 +1,18 @@
 #include "Oscillator.h"
 #include <math.h>
 
+// PolyBLEP residual for a unit rising step at t=0. t and dt are normalized (0..1).
+static inline float polyBlep(float t, float dt) {
+    if (t < dt) {
+        t /= dt;
+        return t + t - t * t - 1.0f;
+    } else if (t > 1.0f - dt) {
+        t = (t - 1.0f) / dt;
+        return t * t + t + t + 1.0f;
+    }
+    return 0.0f;
+}
+
 // Pre-calculated supersaw multipliers (avoid powf per sample)
 static const float SUPERSAW_MULT[7] = {
     0.9937f,  // -0.11 semitones
@@ -27,8 +39,7 @@ Oscillator::Oscillator() :
     fmMod_(0.0f),
     pitchMod_(0.0f),
     pitchMult_(1.0f),
-    noiseState_(22222),
-    lastPulse_(0.0f)
+    noiseState_(22222)
 {
     for (int i = 0; i < 7; i++) {
         supersawPhases_[i] = (uint32_t)(rand());  // Random start phases
@@ -148,15 +159,17 @@ float Oscillator::process() {
             break;
             
         case Waveform::PULSE: {
-            // Variable pulse width using phase comparison
             float t = phase_ * PHASE_TO_FLOAT;
+            float dt = effectiveIncrement_ * PHASE_TO_FLOAT;
             sample = (t < pulseWidth_) ? 1.0f : -1.0f;
-            // Simple lowpass to reduce aliasing
-            sample = lastPulse_ * 0.3f + sample * 0.7f;
-            lastPulse_ = sample;
+            // PolyBLEP at rising edge (t=0, step +2) and falling edge (t=pulseWidth_, step -2)
+            sample += 2.0f * polyBlep(t, dt);
+            float tFall = t - pulseWidth_;
+            if (tFall < 0.0f) tFall += 1.0f;
+            sample -= 2.0f * polyBlep(tFall, dt);
             break;
         }
-            
+
         case Waveform::SUPERSAW:
             sample = generateSupersaw();
             break;
@@ -203,9 +216,13 @@ float Oscillator::processWithFM(float fmInput, float fmAmount) {
             break;
         case Waveform::PULSE: {
             float t = phase_ * PHASE_TO_FLOAT;
+            float dt = effectiveIncrement * PHASE_TO_FLOAT;
             sample = (t < pulseWidth_) ? 1.0f : -1.0f;
-            sample = lastPulse_ * 0.3f + sample * 0.7f;
-            lastPulse_ = sample;
+            // PolyBLEP at rising edge (t=0, step +2) and falling edge (t=pulseWidth_, step -2)
+            sample += 2.0f * polyBlep(t, dt);
+            float tFall = t - pulseWidth_;
+            if (tFall < 0.0f) tFall += 1.0f;
+            sample -= 2.0f * polyBlep(tFall, dt);
             break;
         }
         case Waveform::SUPERSAW:
