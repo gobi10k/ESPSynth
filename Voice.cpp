@@ -79,6 +79,10 @@ void Voice::forceOff() {
     ampEnv_.gate(false);
     filterEnv_.gate(false);
     pitchSmooth_.setImmediate(0.0f);
+    // Reset filter integrator state so a resonant stolen voice does not
+    // inject its accumulated energy (click/burst) into the new note's attack.
+    svf_.reset();
+    ladder_.reset();
 }
 
 float Voice::process() {
