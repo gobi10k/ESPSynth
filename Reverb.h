@@ -46,6 +46,7 @@ private:
     float feedbackGain_;
     float dampingCoef_;
     float dampState_[4];
+    float dithErr_[4];    // error-feedback state for int16 noise shaping
     
     // Pre-delay: 2400 × 2 = 4,800 bytes (50ms)
     static constexpr uint16_t PREDELAY_MAX = 2400;

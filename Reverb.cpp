@@ -27,6 +27,7 @@ void FDNReverb::reset() {
     for (int i = 0; i < 4; i++) {
         memset(delayLines_[i], 0, sizeof(delayLines_[i]));
         writePos_[i] = 0;
+        dithErr_[i] = 0.0f;
     }
     memset(preDelayBuffer_, 0, sizeof(preDelayBuffer_));
     preDelayPos_ = 0;
@@ -134,7 +135,12 @@ void FDNReverb::processStereo(float input, float& left, float& right) {
         // Soft clip before storing
         if (toWrite > 1.0f) toWrite = 1.0f;
         if (toWrite < -1.0f) toWrite = -1.0f;
-        delayLines_[i][writePos_[i]] = (int16_t)(toWrite * 32000.0f);
+        // Error-feedback noise shaping: carry quantisation error forward so it
+        // does not recirculate through the FDN feedback path.
+        float dithered = toWrite + dithErr_[i];
+        int16_t stored = (int16_t)roundf(dithered * 32000.0f);
+        dithErr_[i] = dithered - stored * (1.0f / 32000.0f);
+        delayLines_[i][writePos_[i]] = stored;
         writePos_[i]++;
         if (writePos_[i] >= FDN_MAX_DELAY) writePos_[i] = 0;
     }
