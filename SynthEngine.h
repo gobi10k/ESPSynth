@@ -160,8 +160,6 @@ public:
     // Effects
     EffectsChain& getEffects() { return effects_; }
     Compressor& getCompressor() { return compressor_; }
-    AMod& getAMod() { return aMod_; }
-    Wavefolder& getWavefolder() { return wavefolder_; }
     FDNReverb& getReverb() { return reverb_; }
     
     // Master
@@ -244,8 +242,6 @@ private:
     // Effects
     EffectsChain effects_;
     Compressor compressor_;
-    AMod aMod_;
-    Wavefolder wavefolder_;
     FDNReverb reverb_;
     
     // Master
