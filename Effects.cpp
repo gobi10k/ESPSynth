@@ -1,4 +1,6 @@
 #include "Effects.h"
+#include "MathUtils.h"
+#include "Wavetables.h"
 #include <math.h>
 #include <string.h>
 
@@ -38,15 +40,25 @@ void Delay::clear() {
 }
 
 float Delay::process(float input) {
-    // Read from delay line (convert int16 to float)
-    uint16_t readPos = (writePos_ + MAX_DELAY_SAMPLES - delaySamples_) % MAX_DELAY_SAMPLES;
-    float delayed = buffer_[readPos] / 32767.0f;
+    if (isnan(input) || isinf(input)) return 0.0f;
+
+    // Read from delay line using safe index math
+    int readPos = (int)writePos_ - (int)delaySamples_;
+    if (readPos < 0) readPos += MAX_DELAY_SAMPLES;
+    readPos %= MAX_DELAY_SAMPLES;
     
+    float delayed = buffer_[readPos] / 32767.0f;
+    if (isnan(delayed) || isinf(delayed)) {
+        clear();
+        return input;
+    }
+
     // Write input + feedback to delay line (convert float to int16)
     float toWrite = input + delayed * feedback_;
     toWrite = constrain(toWrite, -1.0f, 1.0f);
     buffer_[writePos_] = (int16_t)(toWrite * 32767.0f);
-    writePos_ = (writePos_ + 1) % MAX_DELAY_SAMPLES;
+    writePos_++;
+    if (writePos_ >= MAX_DELAY_SAMPLES) writePos_ = 0;
     
     // Mix dry/wet
     return input * (1.0f - mix_) + delayed * mix_;
@@ -76,13 +88,15 @@ void Saturation::setMix(float mix) {
 }
 
 float Saturation::process(float input) {
+    if (isnan(input) || isinf(input)) return 0.0f;
+
     float driven = input * drive_;
     float saturated = 0.0f;
     
     switch (type_) {
         case SaturationType::SOFT:
-            // Soft saturation using tanh
-            saturated = tanhf(driven);
+            // Soft saturation using fastTanh
+            saturated = fastTanh(driven);
             break;
             
         case SaturationType::HARD:
@@ -90,14 +104,18 @@ float Saturation::process(float input) {
             saturated = constrain(driven, -1.0f, 1.0f);
             break;
             
-        case SaturationType::FOLDBACK:
-            // Wavefolding
-            while (driven > 1.0f || driven < -1.0f) {
-                if (driven > 1.0f) driven = 2.0f - driven;
-                if (driven < -1.0f) driven = -2.0f - driven;
-            }
-            saturated = driven;
+        case SaturationType::FOLDBACK: {
+            // Wavefolding - non-looping version for stability
+            float x = driven;
+            // First fold
+            if (x > 1.0f) x = 2.0f - x;
+            else if (x < -1.0f) x = -2.0f - x;
+            // Second fold
+            if (x > 1.0f) x = 2.0f - x;
+            else if (x < -1.0f) x = -2.0f - x;
+            saturated = x;
             break;
+        }
             
         case SaturationType::BITCRUSH: {
             // Reduce bit depth
@@ -153,28 +171,23 @@ void Chorus::clear() {
 }
 
 float Chorus::process(float input) {
-    // Safety check
-    if (isnan(input) || isinf(input)) input = 0.0f;
-    
-    // Clamp input
-    if (input > 1.0f) input = 1.0f;
-    if (input < -1.0f) input = -1.0f;
+    if (isnan(input) || isinf(input)) return 0.0f;
     
     // Write to buffer (convert to int16)
     buffer_[writePos_] = (int16_t)(input * 32000.0f);
     
-    // LFO for modulated delay time
-    float lfoValue = sinf(lfoPhase_ * PHASE_TO_FLOAT * 2.0f * M_PI);
+    // LFO using wavetable (much faster than sinf)
+    float lfoValue = Wavetables::readSine(lfoPhase_);
     lfoPhase_ += lfoIncrement_;
     
     // Delay time: 5-12ms modulated by LFO
-    float baseDelay = 0.007f * SAMPLE_RATE;  // 7ms center
-    float modAmount = depth_ * 0.003f * SAMPLE_RATE;  // Up to 3ms mod
+    float baseDelay = 0.007f * SAMPLE_RATE;
+    float modAmount = depth_ * 0.003f * SAMPLE_RATE;
     float delaySamples = baseDelay + lfoValue * modAmount;
     
     // Safety clamp
     if (delaySamples < 1.0f) delaySamples = 1.0f;
-    if (delaySamples > CHORUS_BUFFER_SIZE - 2) delaySamples = CHORUS_BUFFER_SIZE - 2;
+    if (delaySamples > CHORUS_BUFFER_SIZE - 2) delaySamples = (float)CHORUS_BUFFER_SIZE - 2.0f;
     
     // Read with linear interpolation
     float readPosF = (float)writePos_ - delaySamples;
@@ -192,7 +205,8 @@ float Chorus::process(float input) {
     float s1 = buffer_[readPos1] / 32000.0f;
     float delayed = s0 * (1.0f - frac) + s1 * frac;
     
-    writePos_ = (writePos_ + 1) % CHORUS_BUFFER_SIZE;
+    writePos_++;
+    if (writePos_ >= CHORUS_BUFFER_SIZE) writePos_ = 0;
     
     return input * (1.0f - mix_) + delayed * mix_;
 }

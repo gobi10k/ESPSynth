@@ -26,6 +26,8 @@ public:
     void setCutoff(float hz);
     void setResonance(float q);  // 0-1, self-oscillates near 1
     void setMode(FilterMode mode);
+    void setKeyTracking(float amount);
+    void setKeyFreq(float hz) { keyFreq_ = hz; }
     
     float getCutoff() const { return cutoffHz_; }
     float getResonance() const { return resonance_; }
@@ -33,6 +35,7 @@ public:
     
     // Modulation input - added to cutoff each sample
     void setCutoffMod(float mod) { cutoffMod_ = mod; }
+    void updateCoefficients(float modHz);
     
     float process(float input);
     
@@ -45,16 +48,16 @@ public:
     void reset();
 
 private:
-    void updateCoefficients();
-    
     float cutoffHz_;
     float resonance_;
     FilterMode mode_;
+    float keyTracking_;
+    float keyFreq_;
     
     float cutoffMod_;
     
     // Filter coefficients
-    float f_;   // Frequency coefficient
+    float fMod_;   // Frequency coefficient
     float q_;   // Resonance coefficient
     
     // State variables

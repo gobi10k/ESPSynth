@@ -19,10 +19,20 @@
 #include "SynthEngine.h"
 #include "MIDIHandler.h"
 #include "PresetManager.h"
+#include "DisplayManager.h"
+#include "SynthesisTests.h"
+#include "AnalogControls.h"
+#include "HardwareEncoder.h"
+#include "SDManager.h"
 
 SynthEngine synth;
 MIDIHandler midi;
 PresetManager presets;
+DisplayManager display;
+AnalogControls controls;
+SDManager sd;
+HardwareEncoder encNav(ENC1_A_PIN, ENC1_B_PIN, ENC1_SW_PIN);
+HardwareEncoder encVal(ENC2_A_PIN, ENC2_B_PIN, ENC2_SW_PIN);
 
 // ============================================================================
 // STATE
@@ -32,6 +42,8 @@ bool satEnabled = false;
 bool chorusEnabled = false;
 bool delayEnabled = false;
 int selectedLFO = 0;
+bool autoStats = false;
+uint32_t lastHeartbeatBlock = 0;
 
 // ============================================================================
 // MIDI CALLBACKS
@@ -50,6 +62,15 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
         case MIDI_CC::MOD_WHEEL:
             synth.getLFO(0).setDepth(val / 127.0f);
             break;
+        case MIDI_CC::VOLUME:
+            synth.setMasterVolume(val / 127.0f);
+            break;
+        case MIDI_CC::PAN:
+            synth.setGlobalPan((val - 64) / 64.0f);
+            break;
+        case MIDI_CC::EXPRESSION:
+            // Could map to something else, for now just volume scale
+            break;
         case MIDI_CC::FILTER_CUTOFF:
             synth.setFilterCutoff(20.0f + val * 156.0f);  // 20-20000 Hz approx
             break;
@@ -58,9 +79,55 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
             break;
         case MIDI_CC::ATTACK:
             synth.setAmpADSR(val * 0.02f, -1, -1, -1);  // -1 = unchanged
+            synth.setFilterADSR(val * 0.02f, -1, -1, -1);
+            break;
+        case MIDI_CC::DECAY:
+            synth.setAmpADSR(-1, val * 0.02f, -1, -1);
+            synth.setFilterADSR(-1, val * 0.02f, -1, -1);
+            break;
+        case MIDI_CC::SUSTAIN_LEVEL:
+            synth.setAmpADSR(-1, -1, val / 127.0f, -1);
             break;
         case MIDI_CC::RELEASE:
             synth.setAmpADSR(-1, -1, -1, val * 0.02f);
+            synth.setFilterADSR(-1, -1, -1, val * 0.02f);
+            break;
+        case MIDI_CC::FILTER_KEY_TRACK:
+            synth.setFilterKeyTracking(val / 127.0f);
+            break;
+        case MIDI_CC::FILTER_ENV_VEL:
+            synth.setFilterEnvVelocity(val / 127.0f);
+            break;
+        case MIDI_CC::REVERB_SEND:
+            synth.getReverb().setMix(val / 127.0f);
+            if (val > 0) synth.getReverb().setEnabled(true);
+            break;
+        case MIDI_CC::DELAY_SEND:
+            synth.getEffects().delay.setMix(val / 127.0f);
+            break;
+        case MIDI_CC::CHORUS_SEND:
+            synth.getEffects().chorus.setMix(val / 127.0f);
+            break;
+        case MIDI_CC::OSC_MIX:
+            synth.setOscMix(val / 127.0f);
+            break;
+        case MIDI_CC::OSC1_WAVE:
+            synth.setOscWaveform(0, (Waveform)(val % 7));
+            break;
+        case MIDI_CC::OSC2_WAVE:
+            synth.setOscWaveform(1, (Waveform)(val % 7));
+            break;
+        case MIDI_CC::OSC2_DETUNE:
+            synth.setOscDetune(1, (val - 64) * 0.5f);
+            break;
+        case MIDI_CC::SYNTH_MODE:
+            synth.setSynthMode((VoiceSynthMode)(val % 4));
+            break;
+        case MIDI_CC::FM_AMOUNT:
+            synth.setFMAmount(val / 5.0f);
+            break;
+        case MIDI_CC::FILTER_TYPE:
+            synth.setFilterType((VoiceFilterType)(val % 2));
             break;
         case MIDI_CC::ALL_NOTES_OFF:
             synth.allNotesOff();
@@ -70,6 +137,13 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
 
 void onMIDIPitchBend(uint8_t ch, int16_t val) {
     synth.setPitchBend(val);
+}
+
+void onMIDIProgramChange(uint8_t ch, uint8_t program) {
+    PresetData p;
+    if (presets.loadPreset(program, p)) {
+        applyPreset(p);
+    }
 }
 
 void onMIDIClock() {
@@ -90,7 +164,12 @@ void applyPreset(const PresetData& p) {
     synth.setFilterCutoff(p.filterCutoff);
     synth.setFilterResonance(p.filterReso / 100.0f);
     synth.setFilterMode((FilterMode)p.filterMode);
+    synth.setFilterType((VoiceFilterType)p.filterType);
+    synth.setSynthMode((VoiceSynthMode)p.synthMode);
+    synth.setFMAmount(p.fmAmount / 10.0f);  // Scale 0-255 to 0-25.5
     synth.setFilterEnvAmount(p.filterEnvAmount / 100.0f);
+    synth.setFilterEnvVelocity(p.filterEnvVel / 100.0f);
+    synth.setFilterKeyTracking(p.filterKeyTrack / 100.0f);
     
     synth.setAmpADSR(p.ampAttack / 1000.0f, p.ampDecay / 1000.0f,
                     p.ampSustain / 100.0f, p.ampRelease / 1000.0f);
@@ -125,6 +204,7 @@ void applyPreset(const PresetData& p) {
     
     synth.setGlideTime(p.glideTime);
     synth.setMasterVolume(p.masterVolume / 100.0f);
+    synth.setGlobalPan(p.globalPan / 100.0f);
     
     Serial.printf("Loaded: %s\n", p.name);
 }
@@ -137,7 +217,17 @@ PresetData createPresetFromCurrent(const char* name) {
     p.osc2Wave = (uint8_t)synth.getOscWaveform(1);
     p.osc1Detune = (int8_t)synth.getOscDetune(0);
     p.osc2Detune = (int8_t)synth.getOscDetune(1);
-    // ... more params would go here
+    p.oscMix = (uint8_t)(synth.getOscMix() * 100.0f);
+
+    p.filterCutoff = (uint16_t)synth.getFilterCutoff();
+    p.filterReso = (uint8_t)(synth.getFilterResonance() * 100.0f);
+    p.filterMode = (uint8_t)synth.getFilterMode();
+    p.filterType = (uint8_t)synth.getFilterType();
+    p.synthMode = (uint8_t)synth.getSynthMode();
+    p.fmAmount = (uint8_t)(synth.getFMAmount() * 10.0f);
+    p.filterEnvVel = (uint8_t)(synth.getFilterEnvVelocity() * 100.0f);
+    p.filterKeyTrack = (uint8_t)(synth.getFilterKeyTracking() * 100.0f);
+    p.globalPan = (int8_t)(synth.getGlobalPan() * 100.0f);
     
     p.effectFlags = (satEnabled ? 1 : 0) | (chorusEnabled ? 2 : 0) | (delayEnabled ? 4 : 0);
     
@@ -157,16 +247,29 @@ void setup() {
     // Initialize subsystems
     presets.begin();
     
+    if (!display.init(&synth)) {
+        Serial.println("Display init failed");
+    }
+
     if (!synth.init()) {
         Serial.println("FATAL: Synth init failed");
         while (1) delay(1000);
     }
     
+    // Setup SD card
+    sd.begin(SD_CS_PIN);
+
+    // Setup controls
+    controls.init(&synth);
+    encNav.init();
+    encVal.init();
+
     // Setup MIDI
     midi.begin(16, 17);  // RX=16, TX=17
     midi.setNoteOnCallback(onMIDINoteOn);
     midi.setNoteOffCallback(onMIDINoteOff);
     midi.setCCCallback(onMIDICC);
+    midi.setProgramChangeCallback(onMIDIProgramChange);
     midi.setPitchBendCallback(onMIDIPitchBend);
     midi.setClockCallback(onMIDIClock);
     
@@ -180,6 +283,7 @@ void setup() {
     applyPreset(initPreset);
     
     synth.start();
+    display.start();
     
     printHelp();
     Serial.println("\nReady. Type ? for help.\n");
@@ -203,6 +307,8 @@ void printHelp() {
     Serial.println("  d1<cents>  Osc1 detune");
     Serial.println("  d2<cents>  Osc2 detune");
     Serial.println("  om<0-99>   Osc mix %");
+    Serial.println("  sm<0-3>    Synth mode (std/fm/sync/ring)");
+    Serial.println("  sa<val>    FM amount");
     Serial.println("");
     Serial.println("-- Filter --");
     Serial.println("  ft<0-3>    Type (SVF/Ladder/Resonator/Comb)");
@@ -266,15 +372,27 @@ void printHelp() {
     Serial.println("  Kx         Toggle compressor");
     Serial.println("  Kt/Kr/Ka   Comp thresh/ratio/attack");
     Serial.println("");
+    Serial.println("-- SD Card --");
+    Serial.println("  Dl         List SD files");
+    Serial.println("  Ds<slot>   Save preset to SD");
+    Serial.println("  DL<slot>   Load preset from SD");
+    Serial.println("");
     Serial.println("-- Presets --");
-    Serial.println("  P          List presets");
-    Serial.println("  P<0-15>    Load preset");
-    Serial.println("  PS<0-15>   Save to slot");
+    Serial.println("  P          List internal presets");
+    Serial.println("  P<0-15>    Load internal preset");
+    Serial.println("  PS<0-15>   Save to internal slot");
     Serial.println("  PF         Load factory presets");
     Serial.println("");
     Serial.println("-- Other --");
     Serial.println("  gl<ms>     Glide time");
     Serial.println("  v<0-99>    Master volume %");
+    Serial.println("  z          Print CPU statistics");
+    Serial.println("  p          Toggle auto CPU stats");
+    Serial.println("  pn/pp      Display: Next/Prev Page");
+    Serial.println("  t          Run internal tests");
+    Serial.println("  S          Stress test (4 notes, FX on)");
+    Serial.println("  k          Isolated module stress test (sequential)");
+    Serial.println("  V          List active voices status");
     Serial.println("  ?          Help");
 }
 
@@ -355,8 +473,19 @@ void processCommand(const String& cmd) {
             Serial.printf("Cutoff: %.0fHz\n", value);
             break;
         case 'r':
-            synth.setFilterResonance(value / 100.0f);
-            Serial.printf("Resonance: %.0f%%\n", value);
+            if (c1 == 'p') {
+                synth.getResonator().setProfile((ResonatorProfile)((int)value % 6));
+                Serial.printf("Res profile: %d\n", (int)value);
+            } else if (c1 == 'd') {
+                synth.getResonator().setDamping(value / 100.0f);
+                Serial.printf("Res damp: %.0f%%\n", value);
+            } else if (c1 == 'b') {
+                synth.getResonator().setBrightness(value / 100.0f);
+                Serial.printf("Res brightness: %.0f%%\n", value);
+            } else {
+                synth.setFilterResonance(value / 100.0f);
+                Serial.printf("Resonance: %.0f%%\n", value);
+            }
             break;
         case 'f':
             if (c1 == 't') {
@@ -386,10 +515,8 @@ void processCommand(const String& cmd) {
         // === GLOBAL RESONATOR (M) ===
         case 'M':
             if (c1 == 'x') {
-                static bool resEnabled = false;
-                resEnabled = !resEnabled;
-                // Would need setter in SynthEngine
-                Serial.printf("Resonator: %s\n", resEnabled ? "ON" : "OFF");
+                synth.setResonatorEnabled(!synth.isResonatorEnabled());
+                Serial.printf("Resonator: %s\n", synth.isResonatorEnabled() ? "ON" : "OFF");
             } else if (c1 == 'p') {
                 synth.getResonator().setProfile((ResonatorProfile)((int)value % 6));
                 Serial.printf("Res profile: %d\n", (int)value);
@@ -405,9 +532,8 @@ void processCommand(const String& cmd) {
         // === GLOBAL COMB (B) ===
         case 'B':
             if (c1 == 'x') {
-                static bool combEnabled = false;
-                combEnabled = !combEnabled;
-                Serial.printf("Comb: %s\n", combEnabled ? "ON" : "OFF");
+                synth.setCombEnabled(!synth.isCombEnabled());
+                Serial.printf("Comb: %s\n", synth.isCombEnabled() ? "ON" : "OFF");
             } else if (c1 == 'm') {
                 synth.getComb().setMode((CombMode)((int)value % 4));
                 Serial.printf("Comb mode: %d\n", (int)value);
@@ -475,6 +601,12 @@ void processCommand(const String& cmd) {
             } else if (c1 == 'd') {
                 synth.getEffects().saturation.setDrive(value);
                 Serial.printf("Drive: %.1f\n", value);
+            } else if (c1 == 'm') {
+                synth.setSynthMode((VoiceSynthMode)((int)value % 4));
+                Serial.printf("Synth mode: %s\n", VOICE_SYNTH_MODE_NAMES[(int)value % 4]);
+            } else if (c1 == 'a') {
+                synth.setFMAmount(value);
+                Serial.printf("FM amount: %.1f\n", value);
             }
             break;
         case 'C':
@@ -529,6 +661,30 @@ void processCommand(const String& cmd) {
             }
             break;
             
+        // === DISK (SD CARD) ===
+        case 'D':
+            if (c1 == 'l') {
+                sd.listFiles();
+            } else if (c1 == 's') {
+                int slot = (int)value;
+                PresetData p = createPresetFromCurrent("SD_Save");
+                char filename[32];
+                snprintf(filename, sizeof(filename), "preset_%d", slot);
+                if (presets.savePresetToSD(filename, p, sd)) {
+                    Serial.printf("Saved to SD: %s\n", filename);
+                }
+            } else if (c1 == 'L') {
+                int slot = (int)value;
+                PresetData p;
+                char filename[32];
+                snprintf(filename, sizeof(filename), "preset_%d", slot);
+                if (presets.loadPresetFromSD(filename, p, sd)) {
+                    applyPreset(p);
+                    Serial.printf("Loaded from SD: %s\n", filename);
+                }
+            }
+            break;
+
         // === PRESETS ===
         case 'P':
             if (c1 == 'F') {
@@ -553,11 +709,178 @@ void processCommand(const String& cmd) {
             }
             break;
             
-        // === OTHER ===
+        // === PROFILER / TESTS ===
+        case 'z':
+            synth.printCPUStats();
+            break;
+        case 'p':
+            if (c1 == 'n') {
+                display.nextPage();
+                Serial.println("Display: Next Page");
+            } else if (c1 == 'p') {
+                display.prevPage();
+                Serial.println("Display: Prev Page");
+            } else {
+                autoStats = !autoStats;
+                Serial.printf("Auto stats: %s\n", autoStats ? "ON" : "OFF");
+            }
+            break;
+        case 't':
+            SynthesisTests::runAll();
+            break;
+        case 'k':
+            Serial.println("Starting Sequential Module Stress Test (Wait for it)...");
+            Serial.flush();
+
+            synth.allNotesOff();
+            synth.getEffects().setEnabled(false, false, false);
+            synth.getReverb().setEnabled(false);
+            synth.getCompressor().setEnabled(false);
+            synth.setResonatorEnabled(false);
+            synth.setCombEnabled(false);
+            synth.setGranularEnabled(false);
+            delay(1000);
+
+            Serial.printf("Idle CPU: %.1f%%\n", synth.getCPUPercent());
+            Serial.println("1. Triggering 4 voices (Clean)...");
+            Serial.flush();
+            for (int i = 0; i < NUM_VOICES; i++) {
+                Serial.printf("   - Voice %d (Note %d)\n", i, 48 + i * 5);
+                Serial.flush();
+                synth.noteOn(48 + i * 5, 80);
+                delay(200);
+            }
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("2. Enabling Saturation...");
+            Serial.flush();
+            synth.getEffects().saturation.setMix(1.0f);
+            synth.getEffects().setEnabled(true, false, false);
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("2b. Enabling Chorus...");
+            Serial.flush();
+            synth.getEffects().setEnabled(true, true, false);
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("2c. Enabling Delay...");
+            Serial.flush();
+            synth.getEffects().setEnabled(true, true, true);
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("3. Adding Reverb...");
+            Serial.flush();
+            synth.getReverb().setEnabled(true);
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("4. Adding Compressor...");
+            Serial.flush();
+            synth.getCompressor().setEnabled(true);
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("5. Adding Resonator...");
+            Serial.flush();
+            synth.setResonatorEnabled(true);
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("6. Adding Comb Filter...");
+            Serial.flush();
+            synth.setCombEnabled(true);
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("7. Adding Granular Exciter...");
+            Serial.flush();
+            synth.setGranularEnabled(true);
+            delay(2000);
+            Serial.printf("   - Current CPU: %.1f%%\n", synth.getCPUPercent());
+
+            Serial.println("Sequential stress test complete. Still alive!");
+            Serial.flush();
+            break;
+
+        case 'S':
+            Serial.println("Starting Stress Test (Gradual All systems GO)...");
+            synth.setSynthMode(VoiceSynthMode::FM);
+            synth.setFMAmount(5.0f);
+
+            // Enable effects one by one with delay
+            Serial.println("  Enabling basic effects...");
+            synth.getEffects().setEnabled(true, true, true);
+            delay(500);
+
+            Serial.println("  Enabling master effects...");
+            synth.getReverb().setEnabled(true);
+            synth.getCompressor().setEnabled(true);
+            delay(500);
+
+            Serial.println("  Enabling spectral modules...");
+            synth.setResonatorEnabled(true);
+            synth.setCombEnabled(true);
+            synth.setGranularEnabled(true);
+            delay(500);
+
+            for (int i = 0; i < NUM_VOICES; i++) {
+                Serial.printf("  Triggering voice %d (Note %d)...\n", i, 48 + i * 7);
+                synth.noteOn(48 + i * 7, 100);
+                delay(1000); // 1 second between notes for stability monitoring
+            }
+            Serial.println("Stress Test running.");
+            break;
+        case 'V':
+            Serial.println("PANIC: Stopping All Notes & Resetting Engine");
+            synth.allNotesOff();
+            synth.setResonatorEnabled(false);
+            synth.setCombEnabled(false);
+            synth.setGranularEnabled(false);
+            synth.getEffects().setEnabled(false, false, false);
+            synth.getReverb().setEnabled(false);
+            synth.getCompressor().setEnabled(false);
+
+            // Hard reset of all recursive modules
+            synth.getResonator().reset();
+            synth.getComb().reset();
+            synth.getReverb().reset();
+            synth.getEffects().delay.clear();
+            synth.getEffects().chorus.clear();
+
+            for (int i = 0; i < NUM_VOICES; i++) {
+                synth.getVoice(i).forceOff();
+            }
+            Serial.println("Panic reset complete.");
+            break;
+        case 'm':
+            Serial.printf("System Heap: %d bytes free\n", ESP.getFreeHeap());
+            Serial.printf("Min Heap: %d bytes\n", ESP.getMinFreeHeap());
+            break;
+        // === GRANULAR / GLIDE ===
+        case 'G':
         case 'g':
             if (c1 == 'l') {
                 synth.setGlideTime(value);
                 Serial.printf("Glide: %.0fms\n", value);
+            } else if (c1 == 'x') {
+                synth.setGranularEnabled(!synth.isGranularEnabled());
+                Serial.printf("Granular: %s\n", synth.isGranularEnabled() ? "ON" : "OFF");
+            } else if (c1 == 'm') {
+                synth.setGranularMix(value / 100.0f);
+                Serial.printf("Granular Mix: %.0f%%\n", value);
+            } else if (c1 == 'd') {
+                synth.getGranular().setDensity(value);
+                Serial.printf("Granular Density: %.0f grains/sec\n", value);
+            } else if (c1 == 't') {
+                synth.getGranular().setDuration(value);
+                Serial.printf("Granular Duration: %.0fms\n", value);
+            } else if (c1 == 's') {
+                synth.getGranular().setSource((GrainSource)((int)value % 5));
+                Serial.printf("Granular Source: %d\n", (int)value % 5);
             }
             break;
         case 'v':
@@ -578,6 +901,44 @@ void processCommand(const String& cmd) {
 // ============================================================================
 
 void loop() {
+    // Process Hardware Controls
+    controls.update();
+    encNav.update();
+    encVal.update();
+
+    // Handle Navigation Encoder
+    int navDelta = encNav.getDelta();
+    if (navDelta != 0) {
+        if (display.getCurrentPage() == DisplayPage::MAIN) {
+            if (navDelta > 0) display.nextPage();
+            else display.prevPage();
+        } else {
+            if (navDelta > 0) display.nextItem();
+            else display.prevItem();
+        }
+    }
+
+    if (encNav.wasClicked()) {
+        if (display.getCurrentPage() != DisplayPage::MAIN) {
+            display.setPage(DisplayPage::MAIN);
+        } else {
+            display.nextPage();
+        }
+    }
+
+    // Handle Value Encoder
+    int valDelta = encVal.getDelta();
+    if (valDelta != 0) {
+        display.adjustValue(valDelta);
+    }
+
+    if (encVal.wasClicked()) {
+        // Encoder 2 click could trigger something like "preview note"
+        synth.noteOn(60, 100);
+        delay(100);
+        synth.noteOff(60);
+    }
+
     // Process MIDI
     midi.process();
     
@@ -586,6 +947,17 @@ void loop() {
         String cmd = Serial.readStringUntil('\n');
         cmd.trim();
         processCommand(cmd);
+    }
+
+    // Heartbeat and auto-stats from loop() to avoid Serial deadlocks in audio task
+    uint32_t currentBlock = synth.getBlockCount();
+    if (currentBlock >= lastHeartbeatBlock + 375) { // ~1 second
+        lastHeartbeatBlock = currentBlock;
+        if (autoStats) {
+            Serial.printf("[CPU: %.1f%%] ", synth.getCPUPercent());
+        } else {
+            Serial.print(".");
+        }
     }
     
     vTaskDelay(pdMS_TO_TICKS(1));

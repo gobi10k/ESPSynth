@@ -14,7 +14,7 @@ static const float SUPERSAW_MULT[7] = {
 
 Oscillator::Oscillator() : 
     phase_(0), 
-    phaseIncrement_(0),
+    effectiveIncrement_(0),
     basePhaseIncrement_(0),
     frequency_(440.0f),
     baseFrequency_(440.0f),
@@ -26,6 +26,7 @@ Oscillator::Oscillator() :
     pulseWidth_(0.5f),
     fmMod_(0.0f),
     pitchMod_(0.0f),
+    pitchMult_(1.0f),
     noiseState_(22222),
     lastPulse_(0.0f)
 {
@@ -35,7 +36,9 @@ Oscillator::Oscillator() :
     setFrequency(440.0f);
 }
 
-void Oscillator::setFrequency(float freq) {
+void Oscillator::setFrequency(float freq, bool force) {
+    if (!force && fabsf(freq - baseFrequency_) < 0.001f) return;
+
     baseFrequency_ = constrain(freq, 20.0f, 20000.0f);
     frequency_ = baseFrequency_ * detuneMultiplier_;
     updatePhaseIncrement();
@@ -44,6 +47,14 @@ void Oscillator::setFrequency(float freq) {
 
 void Oscillator::setWaveform(Waveform wf) {
     waveform_ = wf;
+}
+
+void Oscillator::setPitchMod(float semitones) {
+    if (semitones != pitchMod_) {
+        pitchMod_ = semitones;
+        pitchMult_ = fastExp2(pitchMod_ / 12.0f);
+        updateEffectiveIncrements();
+    }
 }
 
 void Oscillator::setAmplitude(float amp) {
@@ -63,7 +74,16 @@ void Oscillator::setPulseWidth(float pw) {
 
 void Oscillator::updatePhaseIncrement() {
     basePhaseIncrement_ = (uint32_t)(frequency_ * PHASE_INCREMENT_MULTIPLIER);
-    phaseIncrement_ = basePhaseIncrement_;
+    updateEffectiveIncrements();
+}
+
+void Oscillator::updateEffectiveIncrements() {
+    effectiveIncrement_ = (uint32_t)(basePhaseIncrement_ * pitchMult_);
+    if (waveform_ == Waveform::SUPERSAW) {
+        for (int i = 0; i < 7; i++) {
+            effectiveSupersawIncrements_[i] = (uint32_t)(effectiveIncrement_ * SUPERSAW_MULT[i]);
+        }
+    }
 }
 
 void Oscillator::resetPhase() {
@@ -84,7 +104,7 @@ void Oscillator::sync() {
 
 float Oscillator::generateSupersaw() {
     // Safety check
-    if (basePhaseIncrement_ == 0) return 0.0f;
+    if (effectiveIncrement_ == 0) return 0.0f;
     if (tableIndex_ < 0 || tableIndex_ >= NUM_OCTAVE_TABLES) {
         tableIndex_ = 0;
     }
@@ -92,8 +112,7 @@ float Oscillator::generateSupersaw() {
     float sum = 0.0f;
     
     for (int i = 0; i < 7; i++) {
-        uint32_t inc = (uint32_t)(basePhaseIncrement_ * SUPERSAW_MULT[i]);
-        supersawPhases_[i] += inc;
+        supersawPhases_[i] += effectiveSupersawIncrements_[i];
         sum += Wavetables::readSaw(supersawPhases_[i], tableIndex_);
     }
     
@@ -109,13 +128,6 @@ float Oscillator::generateNoise() {
 }
 
 float Oscillator::process() {
-    // Apply pitch modulation
-    uint32_t effectiveIncrement = basePhaseIncrement_;
-    if (pitchMod_ != 0.0f) {
-        float pitchMult = powf(2.0f, pitchMod_ / 12.0f);
-        effectiveIncrement = (uint32_t)(basePhaseIncrement_ * pitchMult);
-    }
-    
     float sample = 0.0f;
     
     switch (waveform_) {
@@ -157,22 +169,22 @@ float Oscillator::process() {
             sample = 0.0f;
     }
     
-    phase_ += effectiveIncrement;
-    pitchMod_ = 0.0f;  // Reset modulation
-    
+    phase_ += effectiveIncrement_;
     return sample * amplitude_;
 }
 
 float Oscillator::processWithFM(float fmInput, float fmAmount) {
     // FM synthesis: modulate phase increment
-    uint32_t fmOffset = (uint32_t)(fmInput * fmAmount * basePhaseIncrement_);
-    uint32_t effectiveIncrement = basePhaseIncrement_ + fmOffset;
-    
-    // Apply pitch mod on top
-    if (pitchMod_ != 0.0f) {
-        float pitchMult = powf(2.0f, pitchMod_ / 12.0f);
-        effectiveIncrement = (uint32_t)(effectiveIncrement * pitchMult);
-    }
+    // Use float math first to avoid early overflow, then clamp
+    float fmOffset = fmInput * fmAmount * (float)basePhaseIncrement_;
+    float totalIncrement = (float)basePhaseIncrement_ + fmOffset;
+
+    // Clamp to non-negative and reasonable max (2x Nyquist)
+    if (totalIncrement < 0.0f) totalIncrement = 0.0f;
+    if (totalIncrement > (float)PHASE_MAX * 0.5f) totalIncrement = (float)PHASE_MAX * 0.5f;
+
+    // Apply pitch mod on top using pre-calculated multiplier
+    uint32_t effectiveIncrement = (uint32_t)(totalIncrement * pitchMult_);
     
     float sample = 0.0f;
     
@@ -189,12 +201,23 @@ float Oscillator::processWithFM(float fmInput, float fmAmount) {
         case Waveform::TRIANGLE:
             sample = Wavetables::readTriangle(phase_, tableIndex_);
             break;
+        case Waveform::PULSE: {
+            float t = phase_ * PHASE_TO_FLOAT;
+            sample = (t < pulseWidth_) ? 1.0f : -1.0f;
+            sample = lastPulse_ * 0.3f + sample * 0.7f;
+            lastPulse_ = sample;
+            break;
+        }
+        case Waveform::SUPERSAW:
+            sample = generateSupersaw();
+            break;
+        case Waveform::NOISE:
+            sample = generateNoise();
+            break;
         default:
             sample = Wavetables::readSine(phase_);
     }
     
     phase_ += effectiveIncrement;
-    pitchMod_ = 0.0f;
-    
     return sample * amplitude_;
 }

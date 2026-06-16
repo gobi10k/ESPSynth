@@ -5,6 +5,8 @@
 #include "Wavetables.h"
 #include "Filter.h"
 #include "Arpeggiator.h"
+#include "Voice.h"
+#include "SDManager.h"
 
 constexpr uint8_t NUM_PRESETS = 16;
 constexpr uint32_t PRESET_MAGIC = 0x53594E54;  // "SYNT"
@@ -76,8 +78,14 @@ struct PresetData {
     // Master
     uint8_t masterVolume;
     
-    // Padding for future use
-    uint8_t reserved[16];
+    // Extra Params
+    uint8_t filterType;
+    uint8_t synthMode;
+    uint8_t fmAmount;
+    uint8_t filterEnvVel;
+    uint8_t filterKeyTrack;
+    int8_t globalPan;
+    uint8_t reserved[10];
     
     uint32_t checksum;
 };
@@ -98,6 +106,10 @@ public:
     // Factory presets
     void loadFactoryPresets();
     static PresetData getInitPreset();
+
+    // SD Card storage
+    bool savePresetToSD(const char* filename, const PresetData& preset, SDManager& sd);
+    bool loadPresetFromSD(const char* filename, PresetData& preset, SDManager& sd);
 
 private:
     uint32_t calculateChecksum(const PresetData& preset);

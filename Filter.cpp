@@ -7,25 +7,27 @@ Filter::Filter() :
     cutoffHz_(1000.0f),
     resonance_(0.0f),
     mode_(FilterMode::LOWPASS),
+    keyTracking_(0.0f),
+    keyFreq_(440.0f),
     cutoffMod_(0.0f),
-    f_(0.0f),
+    fMod_(0.0f),
     q_(1.0f),
     low_(0.0f),
     high_(0.0f),
     band_(0.0f),
     notch_(0.0f)
 {
-    updateCoefficients();
+    updateCoefficients(0.0f);
 }
 
 void Filter::setCutoff(float hz) {
     cutoffHz_ = constrain(hz, 20.0f, 20000.0f);
-    updateCoefficients();
+    updateCoefficients(0.0f);
 }
 
 void Filter::setResonance(float r) {
     resonance_ = constrain(r, 0.0f, 1.0f);
-    // Q from ~0.5 (no resonance) to ~50 (self-oscillation)
+    // Q from ~1.0 (no resonance) to ~0.02 (self-oscillation)
     q_ = 1.0f - resonance_ * 0.98f;
 }
 
@@ -33,10 +35,20 @@ void Filter::setMode(FilterMode mode) {
     mode_ = mode;
 }
 
-void Filter::updateCoefficients() {
-    // Attempt to keep stable at high frequencies
-    float normalizedFreq = cutoffHz_ / SAMPLE_RATE;
-    f_ = 2.0f * sinf(M_PI * min(normalizedFreq, 0.45f));
+void Filter::setKeyTracking(float amount) {
+    keyTracking_ = constrain(amount, 0.0f, 1.0f);
+}
+
+void Filter::updateCoefficients(float modHz) {
+    float keyOffset = 0.0f;
+    if (keyTracking_ > 0.0f) {
+        keyOffset = (keyFreq_ - 440.0f) * keyTracking_ * 1.5f;
+    }
+
+    float modFreq = cutoffHz_ + modHz + keyOffset;
+    modFreq = constrain(modFreq, 20.0f, 20000.0f);
+    float normalizedFreq = modFreq / SAMPLE_RATE;
+    fMod_ = 2.0f * sinf(M_PI * min(normalizedFreq, 0.45f));
 }
 
 void Filter::reset() {
@@ -47,20 +59,11 @@ void Filter::reset() {
 }
 
 float Filter::process(float input) {
-    // Apply cutoff modulation
-    float modFreq = cutoffHz_ + cutoffMod_;
-    modFreq = constrain(modFreq, 20.0f, 20000.0f);
-    float normalizedFreq = modFreq / SAMPLE_RATE;
-    float fMod = 2.0f * sinf(M_PI * min(normalizedFreq, 0.45f));
-    
-    // Reset modulation for next sample
-    cutoffMod_ = 0.0f;
-    
     // State variable filter iteration (2x oversampled for stability)
     for (int i = 0; i < 2; i++) {
-        low_ += fMod * band_;
+        low_ += fMod_ * band_;
         high_ = input - low_ - q_ * band_;
-        band_ += fMod * high_;
+        band_ += fMod_ * high_;
         notch_ = high_ + low_;
     }
     

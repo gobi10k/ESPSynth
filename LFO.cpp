@@ -1,4 +1,5 @@
 #include "LFO.h"
+#include "Wavetables.h"
 #include <math.h>
 
 LFO::LFO() :
@@ -42,8 +43,12 @@ void LFO::sync() {
 }
 
 float LFO::process() {
+    return process(1);
+}
+
+float LFO::process(int samples) {
     // Apply phase offset
-    uint32_t effectivePhase = phase_ + (uint32_t)(phaseOffset_ * PHASE_MAX);
+    uint32_t effectivePhase = phase_ + (uint32_t)(phaseOffset_ * (float)0xFFFFFFFF);
     
     // Normalized phase 0-1
     float t = effectivePhase * PHASE_TO_FLOAT;
@@ -52,18 +57,11 @@ float LFO::process() {
     
     switch (waveform_) {
         case LFOWaveform::SINE:
-            value = sinf(t * 2.0f * M_PI);
+            value = Wavetables::readSine(effectivePhase);
             break;
             
         case LFOWaveform::TRIANGLE:
-            // Triangle from 0-1 phase
-            if (t < 0.25f) {
-                value = t * 4.0f;
-            } else if (t < 0.75f) {
-                value = 1.0f - (t - 0.25f) * 4.0f;
-            } else {
-                value = -1.0f + (t - 0.75f) * 4.0f;
-            }
+            value = Wavetables::readTriangle(effectivePhase, 2);
             break;
             
         case LFOWaveform::SAW_UP:
@@ -80,10 +78,12 @@ float LFO::process() {
             
         case LFOWaveform::SAMPLE_HOLD:
             // Update S&H on phase wrap
-            if (phase_ < lastSHPhase_) {
-                sampleHoldValue_ = ((float)rand() / RAND_MAX) * 2.0f - 1.0f;
+            // For block processing, we check if multiple wraps happened
+            // but for simplicity we just check if the new phase is less than the old phase
+            // when we add the full increment
+            if (phase_ + phaseIncrement_ * samples < phase_) {
+                 sampleHoldValue_ = ((float)rand() / RAND_MAX) * 2.0f - 1.0f;
             }
-            lastSHPhase_ = phase_;
             value = sampleHoldValue_;
             break;
             
@@ -91,7 +91,7 @@ float LFO::process() {
             value = 0.0f;
     }
     
-    phase_ += phaseIncrement_;
+    phase_ += phaseIncrement_ * samples;
     lastValue_ = value;
     
     return value * depth_;

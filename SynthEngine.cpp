@@ -1,5 +1,6 @@
 #include "SynthEngine.h"
 #include "Wavetables.h"
+#include "MathUtils.h"
 #include <driver/i2s.h>
 #include <math.h>
 
@@ -10,14 +11,21 @@ SynthEngine::SynthEngine() :
     filterMode_(FilterMode::LOWPASS),
     filterType_(VoiceFilterType::SVF),
     filterEnvAmount_(0.5f),
+    filterEnvVelocity_(0.5f),
+    filterKeyTracking_(0.5f),
     ampA_(0.01f), ampD_(0.1f), ampS_(0.7f), ampR_(0.3f),
     fltA_(0.01f), fltD_(0.2f), fltS_(0.3f), fltR_(0.5f),
     glideTime_(0.0f),
     pitchBendRange_(2),
     lastArpGate_(false),
+    synthMode_(VoiceSynthMode::STANDARD),
+    fmAmount_(1.0f),
     resonatorEnabled_(false),
     combEnabled_(false),
     granularMix_(0.0f),
+    granularEnabled_(false),
+    globalPan_(0.0f),
+    currentVelocity_(0.0f),
     running_(false),
     audioTaskHandle_(nullptr)
 {
@@ -92,7 +100,7 @@ void SynthEngine::start() {
     xTaskCreatePinnedToCore(
         audioTaskWrapper,
         "SynthTask",
-        16384,  // Increased stack size
+        20480,  // Further increased stack size to 20KB
         this,
         configMAX_PRIORITIES - 1,
         &audioTaskHandle_,
@@ -154,44 +162,43 @@ int SynthEngine::allocateVoice(uint8_t note) {
 }
 
 void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
+    currentVelocity_ = velocity / 127.0f;
+
     // If arpeggiator is on, feed it instead
     if (arp_.getMode() != ArpMode::OFF) {
         arp_.noteOn(note, velocity);
         return;
     }
     
-    Serial.printf("noteOn: note=%d vel=%d\n", note, velocity);
-    
-    // Find a free voice
-    int voice = -1;
-    for (int i = 0; i < NUM_VOICES; i++) {
-        Serial.printf("  voice[%d] state=%d\n", i, (int)voices_[i].isFree());
-        if (voices_[i].isFree()) {
-            voice = i;
-            break;
-        }
-    }
-    
-    // If no free voice, steal voice 0
-    if (voice < 0) {
-        voice = 0;
-        Serial.println("  stealing voice 0");
-        voices_[voice].forceOff();
-    }
-    
-    Serial.printf("  using voice %d\n", voice);
+    int voice = allocateVoice(note);
+    if (voice < 0) return; // Should not happen with stealing
     
     // Configure voice (minimal settings)
     voices_[voice].setOscWaveform(0, oscWaveforms_[0]);
     voices_[voice].setOscWaveform(1, oscWaveforms_[1]);
     voices_[voice].setOscMix(oscMix_);
+    voices_[voice].setSynthMode(synthMode_);
+    voices_[voice].setFMAmount(fmAmount_);
+    voices_[voice].setFilterType(filterType_);
     voices_[voice].setFilterCutoff(filterCutoff_);
     voices_[voice].setFilterResonance(filterReso_);
+    voices_[voice].setFilterMode(filterMode_);
+    voices_[voice].setFilterEnvAmount(filterEnvAmount_);
+    voices_[voice].setFilterEnvVelocity(filterEnvVelocity_);
+    voices_[voice].setFilterKeyTracking(filterKeyTracking_);
     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
-    
-    Serial.println("  calling noteOn on voice");
+    voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
+
+    // Combine spread and global pan
+    float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
+    voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
+
+    // Melodic tracking for resonator
+    if (resonatorEnabled_) {
+        resonator_.setFrequency(midiToFreq(note));
+    }
+
     voices_[voice].noteOn(note, velocity);
-    Serial.println("  noteOn complete");
 }
 
 void SynthEngine::noteOff(uint8_t note) {
@@ -251,6 +258,20 @@ void SynthEngine::setOscMix(float mix) {
     }
 }
 
+void SynthEngine::setSynthMode(VoiceSynthMode mode) {
+    synthMode_ = mode;
+    for (int i = 0; i < NUM_VOICES; i++) {
+        voices_[i].setSynthMode(mode);
+    }
+}
+
+void SynthEngine::setFMAmount(float amount) {
+    fmAmount_ = amount;
+    for (int i = 0; i < NUM_VOICES; i++) {
+        voices_[i].setFMAmount(amount);
+    }
+}
+
 void SynthEngine::setPulseWidth(int osc, float pw) {
     if (osc >= 0 && osc < 2) {
         pulseWidth_[osc] = pw;
@@ -282,6 +303,20 @@ void SynthEngine::setFilterEnvAmount(float amount) {
     filterEnvAmount_ = constrain(amount, -1.0f, 1.0f);
     for (int i = 0; i < NUM_VOICES; i++) {
         voices_[i].setFilterEnvAmount(amount);
+    }
+}
+
+void SynthEngine::setFilterEnvVelocity(float amount) {
+    filterEnvVelocity_ = constrain(amount, 0.0f, 1.0f);
+    for (int i = 0; i < NUM_VOICES; i++) {
+        voices_[i].setFilterEnvVelocity(amount);
+    }
+}
+
+void SynthEngine::setFilterKeyTracking(float amount) {
+    filterKeyTracking_ = constrain(amount, 0.0f, 1.0f);
+    for (int i = 0; i < NUM_VOICES; i++) {
+        voices_[i].setFilterKeyTracking(amount);
     }
 }
 
@@ -324,6 +359,10 @@ LFO& SynthEngine::getLFO(int index) {
     return lfos_[index % NUM_LFOS];
 }
 
+void SynthEngine::setGranularMix(float mix) {
+    granularMix_ = constrain(mix, 0.0f, 1.0f);
+}
+
 void SynthEngine::setMasterVolume(float vol) {
     masterVolume_.setTarget(constrain(vol, 0.0f, 1.0f));
 }
@@ -337,7 +376,34 @@ uint8_t SynthEngine::getActiveVoiceCount() const {
 }
 
 void SynthEngine::processBlock() {
-    int16_t buffer[DMA_BUFFER_SAMPLES * 2];
+    profiler_.startSample();
+    blockCounter_++;
+
+    // --- Control Rate Update (Once per 128 samples) ---
+    // Massive CPU optimization: Move slow modulation out of the sample loop
+    float lfo1 = lfos_[0].process(DMA_BUFFER_SAMPLES);
+    float lfo2 = lfos_[1].process(DMA_BUFFER_SAMPLES);
+    modMatrix_.setSourceValue(ModSource::LFO1, lfo1);
+    modMatrix_.setSourceValue(ModSource::LFO2, lfo2);
+    modMatrix_.setSourceValue(ModSource::VELOCITY, currentVelocity_);
+    modMatrix_.process();
+    float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
+    float pitchMod = modMatrix_.getModulation(ModDest::OSC_PITCH) * 2.0f;
+
+    for (int v = 0; v < NUM_VOICES; v++) {
+        if (voices_[v].isActive()) {
+            voices_[v].setGlobalFilterMod(filterMod);
+            voices_[v].setGlobalPitchMod(pitchMod);
+            voices_[v].updateBlockParams();
+
+            // Pre-calculate panning coefficients
+            float pan = voices_[v].getPan();
+            float panAngle = (pan + 1.0f) * 0.785398f;
+            voicePanL_[v] = cosf(panAngle);
+            voicePanR_[v] = sinf(panAngle);
+        }
+    }
+    // --------------------------------------------------
     
     for (int i = 0; i < DMA_BUFFER_SAMPLES; i++) {
         // Process arpeggiator (only if mode is not OFF and we have notes)
@@ -356,14 +422,29 @@ void SynthEngine::processBlock() {
                     voices_[voice].setOscDetune(0, oscDetune_[0]);
                     voices_[voice].setOscDetune(1, oscDetune_[1]);
                     voices_[voice].setOscMix(oscMix_);
+                    voices_[voice].setSynthMode(synthMode_);
+                    voices_[voice].setFMAmount(fmAmount_);
                     voices_[voice].setFilterType(filterType_);
                     voices_[voice].setFilterCutoff(filterCutoff_);
                     voices_[voice].setFilterResonance(filterReso_);
                     voices_[voice].setFilterMode(filterMode_);
                     voices_[voice].setFilterEnvAmount(filterEnvAmount_);
+                    voices_[voice].setFilterEnvVelocity(filterEnvVelocity_);
+                    voices_[voice].setFilterKeyTracking(filterKeyTracking_);
                     voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
                     voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
                     voices_[voice].setGlideTime(glideTime_);
+
+                    // Combine spread and global pan
+                    float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
+                    voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
+
+                    currentVelocity_ = arp_.getCurrentVelocity() / 127.0f;
+
+                    if (resonatorEnabled_) {
+                        resonator_.setFrequency(midiToFreq(arp_.getCurrentNote()));
+                    }
+
                     voices_[voice].noteOn(arp_.getCurrentNote(), arp_.getCurrentVelocity());
                 }
             }
@@ -379,49 +460,81 @@ void SynthEngine::processBlock() {
             lastArpGate_ = arp_.isGateOn();
         }
         
-        // LFO and mod matrix disabled for debugging
-        // float lfo1 = lfos_[0].process();
-        // float lfo2 = lfos_[1].process();
-        // modMatrix_.setSourceValue(ModSource::LFO1, lfo1);
-        // modMatrix_.setSourceValue(ModSource::LFO2, lfo2);
-        // modMatrix_.process();
-        // float filterMod = modMatrix_.getModulation(ModDest::FILTER_CUTOFF);
-        
-        // Mix all voices - SIMPLIFIED
-        float sample = 0.0f;
+        // Mix all voices with panning
+        float left = 0.0f;
+        float right = 0.0f;
+
         for (int v = 0; v < NUM_VOICES; v++) {
             if (voices_[v].isActive()) {
                 float voiceSample = voices_[v].process();
                 // Safety clamp
                 if (voiceSample > 1.0f) voiceSample = 1.0f;
                 if (voiceSample < -1.0f) voiceSample = -1.0f;
-                sample += voiceSample;
+
+                left += voiceSample * voicePanL_[v];
+                right += voiceSample * voicePanR_[v];
             }
         }
         
         // Scale down for mixing
-        sample *= 0.3f;
-        
-        // BYPASS ALL EFFECTS FOR NOW
-        // sample = effects_.process(sample);
-        // sample = reverb_.process(sample);
-        // sample = compressor_.process(sample);
-        
+        left *= 0.3f;
+        right *= 0.3f;
+
+        // Apply Granular exciter (if enabled) - Mono input, but we can spread it
+        if (granularEnabled_) {
+            float gran = granular_.process();
+            left = left * (1.0f - granularMix_) + gran * granularMix_ * 0.7f;
+            right = right * (1.0f - granularMix_) + gran * granularMix_ * 0.7f;
+        }
+
+        // Apply Resonator and Comb (if enabled) - Currently Mono
+        if (resonatorEnabled_) {
+            float mono = (left + right) * 0.5f;
+            float res = resonator_.process(mono);
+            left = left * 0.5f + res * 0.5f;
+            right = right * 0.5f + res * 0.5f;
+        }
+        if (combEnabled_) {
+            float mono = (left + right) * 0.5f;
+            float cb = comb_.process(mono);
+            left = left * 0.5f + cb * 0.5f;
+            right = right * 0.5f + cb * 0.5f;
+        }
+
+        if (isnan(left) || isinf(left)) left = 0.0f;
+        if (isnan(right) || isinf(right)) right = 0.0f;
+
+        // Process global effects - mono for now but we'll adapt them
+        float monoInput = (left + right) * 0.5f;
+        float wetMono = effects_.process(monoInput);
+
+        // Reverb - let's make it pseudo-stereo
+        float wetL, wetR;
+        reverb_.processStereo(monoInput, wetL, wetR);
+
+        float finalL = wetMono * 0.5f + wetL;
+        float finalR = wetMono * 0.5f + wetR;
+
+        // Compressor on stereo
+        float compL = compressor_.process(finalL);
+        float compR = compressor_.process(finalR);
+
         // Master volume
         float vol = masterVolume_.process();
-        sample *= vol;
+        left = compL * vol;
+        right = compR * vol;
         
-        // Hard clip
-        if (sample > 1.0f) sample = 1.0f;
-        if (sample < -1.0f) sample = -1.0f;
+        // Soft clip
+        left = fastTanh(left);
+        right = fastTanh(right);
         
-        int16_t sampleInt = (int16_t)(sample * 32000.0f);
-        buffer[i * 2] = sampleInt;
-        buffer[i * 2 + 1] = sampleInt;
+        blockBuffer_[i * 2] = (int16_t)(left * 32767.0f);
+        blockBuffer_[i * 2 + 1] = (int16_t)(right * 32767.0f);
     }
     
+    profiler_.endSample();
     size_t bytesWritten;
-    i2s_write(I2S_NUM_0, buffer, sizeof(buffer), &bytesWritten, portMAX_DELAY);
+    i2s_write(I2S_NUM_0, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {

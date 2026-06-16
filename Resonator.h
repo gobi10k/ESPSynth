@@ -61,6 +61,7 @@ public:
 
 private:
     void updateCoefficients();
+    void applyDirtyCoefficients();
     float processResonator(int index, float input);
     
     float fundamental_;
@@ -81,6 +82,11 @@ private:
     float b0_[MAX_RESONATORS], b1_[MAX_RESONATORS], b2_[MAX_RESONATORS];
     float a1_[MAX_RESONATORS], a2_[MAX_RESONATORS];
     
+    // Shadow coefficients for atomic updates
+    float nb0_[MAX_RESONATORS], nb1_[MAX_RESONATORS], nb2_[MAX_RESONATORS];
+    float na1_[MAX_RESONATORS], na2_[MAX_RESONATORS];
+    volatile bool dirty_;
+
     // Biquad state per resonator
     float x1_[MAX_RESONATORS], x2_[MAX_RESONATORS];
     float y1_[MAX_RESONATORS], y2_[MAX_RESONATORS];

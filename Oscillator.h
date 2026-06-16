@@ -3,13 +3,14 @@
 
 #include "Config.h"
 #include "Wavetables.h"
+#include "MathUtils.h"
 
 class Oscillator {
 public:
     Oscillator();
     
     // Basic parameters
-    void setFrequency(float freq);
+    void setFrequency(float freq, bool force = false);
     void setWaveform(Waveform wf);
     void setAmplitude(float amp);
     void setDetune(float cents);      // Detune in cents (-100 to +100)
@@ -23,7 +24,7 @@ public:
     
     // Modulation inputs (call before process())
     void setFMMod(float mod) { fmMod_ = mod; }
-    void setPitchMod(float semitones) { pitchMod_ = semitones; }
+    void setPitchMod(float semitones);
     
     // Processing
     float process();
@@ -37,11 +38,12 @@ public:
 
 private:
     void updatePhaseIncrement();
+    void updateEffectiveIncrements();
     float generateSupersaw();
     float generateNoise();
     
     uint32_t phase_;
-    uint32_t phaseIncrement_;
+    uint32_t effectiveIncrement_;
     uint32_t basePhaseIncrement_;
     
     float frequency_;
@@ -58,9 +60,11 @@ private:
     // Modulation
     float fmMod_;
     float pitchMod_;
+    float pitchMult_;
     
     // Supersaw state (7 detuned saws)
     uint32_t supersawPhases_[7];
+    uint32_t effectiveSupersawIncrements_[7];
     
     // Noise state
     uint32_t noiseState_;

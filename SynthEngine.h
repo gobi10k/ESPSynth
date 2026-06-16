@@ -16,7 +16,62 @@
 #include "Resonator.h"
 #include "CombFilter.h"
 
-constexpr uint8_t NUM_VOICES = 2;
+constexpr uint8_t NUM_VOICES = 4;
+
+class AudioProfiler {
+public:
+    void startSample() {
+        startTime_ = micros();
+    }
+
+    void endSample() {
+        uint32_t elapsed = micros() - startTime_;
+        totalTime_ += elapsed;
+        sampleCount_++;
+        if (elapsed > maxTime_) maxTime_ = elapsed;
+        if (elapsed < minTime_) minTime_ = elapsed;
+
+        // Update rolling average
+        float blockDurationUs = (DMA_BUFFER_SAMPLES * 1000000.0f) / SAMPLE_RATE;
+        lastCpuLoad_ = (elapsed / blockDurationUs) * 100.0f;
+    }
+
+    float getCPUPercent() const { return lastCpuLoad_; }
+
+    void printStats() {
+        if (sampleCount_ == 0) {
+            Serial.println("Profiler: No data collected");
+            return;
+        }
+        uint32_t avgTime = totalTime_ / sampleCount_;
+        float blockDurationUs = (DMA_BUFFER_SAMPLES * 1000000.0f) / SAMPLE_RATE;
+        float cpuPercent = (avgTime / blockDurationUs) * 100.0f;
+
+        Serial.printf("Audio CPU: %.1f%% (avg: %luus, max: %luus, min: %luus) over %lu blocks\n",
+                      cpuPercent, avgTime, maxTime_, minTime_, sampleCount_);
+
+        if (maxTime_ > blockDurationUs) {
+            Serial.printf("WARNING: Task Overflow! Max time %luus exceeds block duration %.0fus\n",
+                          maxTime_, blockDurationUs);
+        }
+        reset();
+    }
+
+    void reset() {
+        totalTime_ = 0;
+        sampleCount_ = 0;
+        maxTime_ = 0;
+        minTime_ = 0xFFFFFFFF;
+    }
+
+private:
+    uint32_t startTime_;
+    uint32_t totalTime_ = 0;
+    uint32_t sampleCount_ = 0;
+    uint32_t maxTime_ = 0;
+    uint32_t minTime_ = 0xFFFFFFFF;
+    float lastCpuLoad_ = 0.0f;
+};
 
 class SynthEngine {
 public:
@@ -44,18 +99,30 @@ public:
     
     Waveform getOscWaveform(int osc) const { return oscWaveforms_[osc]; }
     float getOscDetune(int osc) const { return oscDetune_[osc]; }
+    float getOscMix() const { return oscMix_; }
+
+    // Synthesis mode
+    void setSynthMode(VoiceSynthMode mode);
+    void setFMAmount(float amount);
+    VoiceSynthMode getSynthMode() const { return synthMode_; }
+    float getFMAmount() const { return fmAmount_; }
     
     // Global filter
     void setFilterCutoff(float hz);
     void setFilterResonance(float r);
     void setFilterMode(FilterMode mode);
     void setFilterEnvAmount(float amount);
+    void setFilterEnvVelocity(float amount);
+    void setFilterKeyTracking(float amount);
     void setFilterType(VoiceFilterType type);
     
     float getFilterCutoff() const { return filterCutoff_; }
     float getFilterResonance() const { return filterReso_; }
     FilterMode getFilterMode() const { return filterMode_; }
     VoiceFilterType getFilterType() const { return filterType_; }
+    float getFilterEnvAmount() const { return filterEnvAmount_; }
+    float getFilterEnvVelocity() const { return filterEnvVelocity_; }
+    float getFilterKeyTracking() const { return filterKeyTracking_; }
     
     // Envelopes
     void setAmpADSR(float a, float d, float s, float r);
@@ -76,12 +143,19 @@ public:
     
     // Global Resonator (single instance for master chain)
     ResonatorBank& getResonator() { return resonator_; }
+    void setResonatorEnabled(bool en) { resonatorEnabled_ = en; }
+    bool isResonatorEnabled() const { return resonatorEnabled_; }
     
     // Global Comb (single instance for master chain)
     CombFilter& getComb() { return comb_; }
+    void setCombEnabled(bool en) { combEnabled_ = en; }
+    bool isCombEnabled() const { return combEnabled_; }
     
     // Granular exciter
     GranularExciter& getGranular() { return granular_; }
+    void setGranularEnabled(bool en) { granularEnabled_ = en; }
+    bool isGranularEnabled() const { return granularEnabled_; }
+    void setGranularMix(float mix);
     
     // Effects
     EffectsChain& getEffects() { return effects_; }
@@ -93,10 +167,21 @@ public:
     // Master
     void setMasterVolume(float vol);
     float getMasterVolume() const { return masterVolume_.getTarget(); }
+    void setGlobalPan(float pan) { globalPan_ = pan; }
+    float getGlobalPan() const { return globalPan_; }
     
+    // Profiler
+    void printCPUStats() { profiler_.printStats(); }
+    float getCPUPercent() { return profiler_.getCPUPercent(); }
+    uint32_t getBlockCount() const { return blockCounter_; }
+
     // Voice info
     uint8_t getActiveVoiceCount() const;
     Voice& getVoice(int i) { return voices_[i]; }
+
+    static float midiToFreq(uint8_t note) {
+        return 440.0f * powf(2.0f, (note - 69) / 12.0f);
+    }
 
 private:
     void processBlock();
@@ -112,12 +197,16 @@ private:
     float oscDetune_[2];
     float oscMix_;
     float pulseWidth_[2];
+    VoiceSynthMode synthMode_;
+    float fmAmount_;
     
     float filterCutoff_;
     float filterReso_;
     FilterMode filterMode_;
     VoiceFilterType filterType_;
     float filterEnvAmount_;
+    float filterEnvVelocity_;
+    float filterKeyTracking_;
     
     float ampA_, ampD_, ampS_, ampR_;
     float fltA_, fltD_, fltS_, fltR_;
@@ -146,6 +235,7 @@ private:
     // Granular exciter
     GranularExciter granular_;
     float granularMix_;
+    bool granularEnabled_;
     
     // Effects
     EffectsChain effects_;
@@ -156,10 +246,17 @@ private:
     
     // Master
     SmoothedValue masterVolume_;
+    float globalPan_;
     
     // Runtime
+    float currentVelocity_;
     volatile bool running_;
+    volatile uint32_t blockCounter_ = 0;
+    float voicePanL_[NUM_VOICES];
+    float voicePanR_[NUM_VOICES];
     TaskHandle_t audioTaskHandle_;
+    AudioProfiler profiler_;
+    int16_t blockBuffer_[DMA_BUFFER_SAMPLES * 2];
 };
 
 #endif

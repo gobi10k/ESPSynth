@@ -24,7 +24,8 @@ ResonatorBank::ResonatorBank() :
     brightness_(0.8f),
     mix_(0.5f),
     brightnessCoef_(0.0f),
-    brightnessState_(0.0f)
+    brightnessState_(0.0f),
+    dirty_(false)
 {
     // Default gains (decreasing for higher partials)
     for (int i = 0; i < MAX_RESONATORS; i++) {
@@ -114,9 +115,8 @@ void ResonatorBank::updateCoefficients() {
         
         // Clamp to Nyquist
         if (freq >= SAMPLE_RATE * 0.45f) {
-            // Disable this resonator by zeroing b0
-            b0_[i] = b1_[i] = b2_[i] = 0.0f;
-            a1_[i] = a2_[i] = 0.0f;
+            nb0_[i] = nb1_[i] = nb2_[i] = 0.0f;
+            na1_[i] = na2_[i] = 0.0f;
             continue;
         }
         
@@ -131,14 +131,28 @@ void ResonatorBank::updateCoefficients() {
         float alpha = sinw0 / (2.0f * partialQ);
         
         float a0 = 1.0f + alpha;
-        b0_[i] = (alpha * partialQ) / a0;  // Gain at center
-        b1_[i] = 0.0f;
-        b2_[i] = (-alpha * partialQ) / a0;
-        a1_[i] = (-2.0f * cosw0) / a0;
-        a2_[i] = (1.0f - alpha) / a0;
+        nb0_[i] = (alpha * partialQ) / a0;
+        nb1_[i] = 0.0f;
+        nb2_[i] = (-alpha * partialQ) / a0;
+        na1_[i] = (-2.0f * cosw0) / a0;
+        na2_[i] = (1.0f - alpha) / a0;
     }
     
+    dirty_ = true;
     setBrightness(brightness_);  // Update brightness filter
+}
+
+void ResonatorBank::applyDirtyCoefficients() {
+    if (!dirty_) return;
+
+    for (int i = 0; i < MAX_RESONATORS; i++) {
+        b0_[i] = nb0_[i];
+        b1_[i] = nb1_[i];
+        b2_[i] = nb2_[i];
+        a1_[i] = na1_[i];
+        a2_[i] = na2_[i];
+    }
+    dirty_ = false;
 }
 
 float ResonatorBank::processResonator(int index, float input) {
@@ -150,6 +164,8 @@ float ResonatorBank::processResonator(int index, float input) {
 }
 
 float ResonatorBank::process(float input) {
+    applyDirtyCoefficients();
+
     // Sum all resonators
     float resonated = 0.0f;
     

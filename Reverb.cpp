@@ -79,19 +79,39 @@ void FDNReverb::updateDecayCoefficients() {
 }
 
 float FDNReverb::process(float input) {
-    if (!enabled_) return input;
+    float l, r;
+    processStereo(input, l, r);
+    return (l + r) * 0.5f;
+}
+
+void FDNReverb::processStereo(float input, float& left, float& right) {
+    if (!enabled_) {
+        left = right = input;
+        return;
+    }
     
-    // Pre-delay
-    int16_t preDelayed = preDelayBuffer_[(preDelayPos_ - preDelayTime_ + PREDELAY_MAX) % PREDELAY_MAX];
+    if (isnan(input) || isinf(input)) {
+        left = right = 0.0f;
+        return;
+    }
+
+    // Pre-delay using safe index math
+    int preReadPos = (int)preDelayPos_ - (int)preDelayTime_;
+    if (preReadPos < 0) preReadPos += PREDELAY_MAX;
+
+    int16_t preDelayed = preDelayBuffer_[preReadPos];
     preDelayBuffer_[preDelayPos_] = (int16_t)(input * 32000.0f);
-    preDelayPos_ = (preDelayPos_ + 1) % PREDELAY_MAX;
+    preDelayPos_++;
+    if (preDelayPos_ >= PREDELAY_MAX) preDelayPos_ = 0;
     
     float preDelayedF = preDelayed / 32000.0f;
     
     // Read from delay lines
     float outputs[4];
     for (int i = 0; i < 4; i++) {
-        int readPos = (writePos_[i] - delayTimes_[i] + FDN_MAX_DELAY) % FDN_MAX_DELAY;
+        int readPos = (int)writePos_[i] - (int)delayTimes_[i];
+        if (readPos < 0) readPos += FDN_MAX_DELAY;
+
         outputs[i] = delayLines_[i][readPos] / 32000.0f;
         
         // Damping filter
@@ -114,11 +134,14 @@ float FDNReverb::process(float input) {
         if (toWrite > 1.0f) toWrite = 1.0f;
         if (toWrite < -1.0f) toWrite = -1.0f;
         delayLines_[i][writePos_[i]] = (int16_t)(toWrite * 32000.0f);
-        writePos_[i] = (writePos_[i] + 1) % FDN_MAX_DELAY;
+        writePos_[i]++;
+        if (writePos_[i] >= FDN_MAX_DELAY) writePos_[i] = 0;
     }
     
-    // Output sum
-    float wet = (outputs[0] + outputs[1] + outputs[2] + outputs[3]) * 0.25f;
+    // Stereo Output: split the 4 channels into 2 pairs
+    float wetL = (outputs[0] + outputs[1]) * 0.5f;
+    float wetR = (outputs[2] + outputs[3]) * 0.5f;
     
-    return input * (1.0f - mix_) + wet * mix_;
+    left = input * (1.0f - mix_) + wetL * mix_;
+    right = input * (1.0f - mix_) + wetR * mix_;
 }

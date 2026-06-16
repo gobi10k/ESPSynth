@@ -1,4 +1,5 @@
 #include "Compressor.h"
+#include "MathUtils.h"
 #include <math.h>
 
 Compressor::Compressor() :
@@ -50,12 +51,14 @@ void Compressor::setKnee(float dB) {
 
 float Compressor::process(float input) {
     if (!enabled_) return input;
+    if (isnan(input) || isinf(input)) return 0.0f;
     
     // Get input level
     float inputAbs = fabsf(input);
     
-    // Convert to dB
-    float inputDb = (inputAbs > 0.00001f) ? 20.0f * log10f(inputAbs) : -100.0f;
+    // Convert to dB using fast log2
+    // 20 * log10(x) = 20 * log2(x) / log2(10) approx 6.0206 * log2(x)
+    float inputDb = (inputAbs > 0.00001f) ? 6.0206f * fastLog2(inputAbs) : -100.0f;
     
     // Calculate gain reduction with soft knee
     float overDb = inputDb - thresholdDb_;
@@ -82,7 +85,8 @@ float Compressor::process(float input) {
     gainReductionDb_ = envelope_;
     
     // Apply gain reduction
-    float gainLin = powf(10.0f, -envelope_ / 20.0f);
+    // 10^(x/20) = e^(x/20 * ln(10)) = e^(x * 0.115129)
+    float gainLin = fastExp(-envelope_ * 0.115129f);
     
     return input * gainLin * makeupGain_;
 }

@@ -2,6 +2,7 @@
 #define MOOG_FILTER_H
 
 #include "Config.h"
+#include "MathUtils.h"
 
 /**
  * Moog Ladder Filter Approximation
@@ -32,6 +33,7 @@ public:
     
     // Modulation input (added to cutoff)
     void setCutoffMod(float mod) { cutoffMod_ = mod; }
+    void updateCoefficients(float modHz);
     
     float process(float input);
     void reset();
@@ -43,7 +45,8 @@ private:
     float cutoffMod_;
     
     // Filter coefficient
-    float g_;  // Cutoff coefficient
+    float gMod_;  // Current modulated coefficient
+    float invGMod_;
     
     // 4 stages of state
     float stage_[4];
@@ -51,12 +54,6 @@ private:
     // Delay elements for feedback
     float delay_[4];
     
-    // Tanh approximation for saturation
-    inline float saturate(float x) {
-        // Fast tanh approximation
-        float x2 = x * x;
-        return x * (27.0f + x2) / (27.0f + 9.0f * x2);
-    }
 };
 
 /**
@@ -93,6 +90,7 @@ public:
     
     void setCutoffMod(float mod) { cutoffMod_ = mod; }
     void setKeyFreq(float hz) { keyFreq_ = hz; }
+    void updateCoefficients(float modHz);
     
     float process(float input);
     void reset();
@@ -107,7 +105,8 @@ private:
     float cutoffMod_;
     
     // Filter coefficient
-    float g_;
+    float gMod_;
+    float invGMod_;
     
     // 4 stages
     float stage_[4];
@@ -117,11 +116,6 @@ private:
     float taps_[5];
     
     void updateTaps();
-    
-    inline float saturate(float x) {
-        float x2 = x * x;
-        return x * (27.0f + x2) / (27.0f + 9.0f * x2);
-    }
 };
 
 #endif
