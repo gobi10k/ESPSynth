@@ -240,13 +240,47 @@ PresetData createPresetFromCurrent(const char* name) {
 
 void setup() {
     Serial.begin(115200);
+    Serial.setRxBufferSize(1024);
     delay(1000);
     
     Serial.println("\n=== ESP32 Synth v5 - Resonant Spectral Engine ===\n");
     
-    // Initialize subsystems
+    // 1. Setup SD card FIRST to avoid bus contention
+    if (sd.begin(SD_CS_PIN)) {
+        Serial.println("[SD] Initializing filesystem...");
+        const char* welcomeMsg = "=== ESP32 Synth v5 ===\nWelcome to your SD card!\nPresets are stored here.\n";
+        sd.writeFile("/welcome.txt", (const uint8_t*)welcomeMsg, strlen(welcomeMsg));
+
+        // Create presets directory if not exists
+        if (!sd.exists("/presets")) {
+            Serial.println("[SD] Creating /presets directory...");
+            sd.mkdir("/presets");
+        }
+
+        // Populate with a few test presets if empty
+        File pDir = SD.open("/presets");
+        if (pDir && pDir.isDirectory()) {
+            File first = pDir.openNextFile();
+            if (!first) {
+                Serial.println("[SD] Populating test presets...");
+                for (int i = 0; i < 3; i++) {
+                    PresetData p = PresetManager::getInitPreset();
+                    snprintf(p.name, 15, "SD Test %d", i);
+                    char fname[32];
+                    snprintf(fname, 32, "test_%d", i);
+                    presets.savePresetToSD(fname, p, sd);
+                }
+            }
+            if (first) first.close();
+            pDir.close();
+        }
+    } else {
+        Serial.println("[SD] Card NOT detected or initialization failed.");
+    }
+
+    // 2. Initialize other subsystems
     presets.begin();
-    
+
     if (!display.init(&synth)) {
         Serial.println("Display init failed");
     }
@@ -255,9 +289,6 @@ void setup() {
         Serial.println("FATAL: Synth init failed");
         while (1) delay(1000);
     }
-    
-    // Setup SD card
-    sd.begin(SD_CS_PIN);
 
     // Setup controls
     controls.init(&synth);
@@ -376,6 +407,8 @@ void printHelp() {
     Serial.println("  Dl         List SD files");
     Serial.println("  Ds<slot>   Save preset to SD");
     Serial.println("  DL<slot>   Load preset from SD");
+    Serial.println("  Di         Re-initialize SD card");
+    Serial.println("  Df         Format/Prepare SD folders");
     Serial.println("");
     Serial.println("-- Presets --");
     Serial.println("  P          List internal presets");
@@ -682,6 +715,17 @@ void processCommand(const String& cmd) {
                     applyPreset(p);
                     Serial.printf("Loaded from SD: %s\n", filename);
                 }
+            } else if (c1 == 'i') {
+                Serial.println("[SD] Re-initializing...");
+                sd.begin(SD_CS_PIN);
+            } else if (c1 == 'f') {
+                if (sd.isAvailable()) {
+                    Serial.println("[SD] Preparing filesystem...");
+                    sd.mkdir("/presets");
+                    Serial.println("[SD] /presets directory created.");
+                } else {
+                    Serial.println("[SD] Error: Card not available.");
+                }
             }
             break;
 
@@ -901,7 +945,17 @@ void processCommand(const String& cmd) {
 // ============================================================================
 
 void loop() {
-    // Process Hardware Controls
+    // 1. Process serial commands (Priority for responsiveness under load)
+    if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        processCommand(cmd);
+    }
+
+    // 2. Process MIDI
+    midi.process();
+
+    // 3. Process Hardware Controls
     controls.update();
     encNav.update();
     encVal.update();
@@ -937,16 +991,6 @@ void loop() {
         synth.noteOn(60, 100);
         delay(100);
         synth.noteOff(60);
-    }
-
-    // Process MIDI
-    midi.process();
-    
-    // Process serial commands
-    if (Serial.available()) {
-        String cmd = Serial.readStringUntil('\n');
-        cmd.trim();
-        processCommand(cmd);
     }
 
     // Heartbeat and auto-stats from loop() to avoid Serial deadlocks in audio task

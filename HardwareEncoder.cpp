@@ -16,8 +16,19 @@ HardwareEncoder::HardwareEncoder(uint8_t pinA, uint8_t pinB, uint8_t pinSW) :
 }
 
 void HardwareEncoder::init() {
-    pinMode(pinA_, INPUT_PULLUP);
-    pinMode(pinB_, INPUT_PULLUP);
+    // GPIO 36 and 39 are input-only and don't have internal pullups on ESP32
+    if (pinA_ == 36 || pinA_ == 39) {
+        pinMode(pinA_, INPUT);
+    } else {
+        pinMode(pinA_, INPUT_PULLUP);
+    }
+
+    if (pinB_ == 36 || pinB_ == 39) {
+        pinMode(pinB_, INPUT);
+    } else {
+        pinMode(pinB_, INPUT_PULLUP);
+    }
+
     pinMode(pinSW_, INPUT_PULLUP);
 
     // Initial state

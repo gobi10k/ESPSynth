@@ -51,7 +51,7 @@ The post-mix signal passes through a comprehensive effect suite:
 - **Control Interface:**
   - **Encoder 1 (Nav):** Page switching and item selection (A:36, B:39, SW:15).
   - **Encoder 2 (Value):** Parameter adjustment (A:14, B:12, SW:13).
-- **Storage:** Micro SD Card (SPI: 5, 18, 19, 23) for preset management.
+- **Storage:** Micro SD Card (SPI: 4, 18, 19, 23) for preset management.
 
 ## 6. MIDI & Preset System
 - **Presets:** 16 internal slots + unlimited SD card storage.
@@ -80,3 +80,36 @@ The post-mix signal passes through a comprehensive effect suite:
 - **Fast DSP Math:** custom `MathUtils.h` providing optimized approximations for `exp`, `tanh`, and `log`.
 - **Cached Increments:** Oscillator phase increments are cached to eliminate redundant float math.
 - **Heartbeat Monitor:** Core 0 monitors Core 1 liveness via a volatile block counter to ensure system stability.
+
+## 8. SD Card Setup & Troubleshooting
+The SD card system is critical for long-term preset storage. If initialization fails, check the following:
+
+### Hardware Requirements
+- **Formatting:** Must be **FAT32** or **FAT16**. ExFAT is not supported by the standard Arduino SD library.
+- **Partitioning:** Use a **Master Boot Record (MBR)** partition scheme. GPT partitions may not be recognized.
+- **Wiring (VSPI):**
+  - **CS:** GPIO 4 (Changed from 5 to avoid conflict)
+  - **SCK:** GPIO 18
+  - **MISO:** GPIO 19
+  - **MOSI:** GPIO 23
+- **Voltage:** The ESP32 is a 3.3V device. Ensure your SD card module has proper level shifters if powering from 5V, or ideally, use a 3.3V native module.
+
+### Software Configuration
+- **Directory Structure:** The synth expects a `/presets/` directory at the root of the card.
+- **File Format:** Presets are stored as binary files with the `.sy` extension.
+- **Auto-Initialization:** On first successful boot with a blank SD card, the synth will automatically:
+  1. Create a `/welcome.txt` file.
+  2. Create the `/presets/` directory.
+  3. Generate 3 initial test presets.
+
+### Troubleshooting Steps
+1. **Card Detection:** If you see `[SD] Card NOT detected`, check the CS pin wiring and ensure the card is fully inserted.
+2. **Handshake Failures:** If initialization fails at 400kHz, it usually indicates signal integrity issues. Keep SPI wires as short as possible (< 10cm).
+3. **Dedicated Bus:** This project uses a dedicated VSPI instance to prevent conflicts with the I2S audio task. Ensure no other peripherals are sharing these pins.
+4. **Manual Creation:** If the synth cannot create the directory, you can manually create a folder named `presets` on your PC and try again.
+
+### Preloading Presets (Optional)
+While the synth auto-populates the card, you can manually add presets. A preset file is a binary blob exactly **128 bytes** in size (current `sizeof(PresetData)`).
+- Create a folder named `presets` at the root.
+- Name files like `pad.sy`, `bass.sy`, etc. (max 8.3 filename format is safest).
+- The synth will scan this directory when you use the `Dl` (List) command.

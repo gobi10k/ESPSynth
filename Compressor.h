@@ -34,6 +34,9 @@ private:
     float releaseCoef_;
     float makeupGain_;
     float kneeWidth_;
+    float kneeHalf_;
+    float kneeInv_;
+    float ratioMinusOne_;
     
     float envelope_;
     float gainReductionDb_;

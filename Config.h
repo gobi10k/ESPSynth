@@ -91,7 +91,7 @@ constexpr uint8_t ENC2_SW_PIN = 13;
 // SD CARD CONFIGURATION (SPI)
 // ============================================================================
 
-constexpr uint8_t SD_CS_PIN   = 5;
+constexpr uint8_t SD_CS_PIN   = 4; // Moved from 5 to avoid hardware conflict
 constexpr uint8_t SD_SCK_PIN  = 18;
 constexpr uint8_t SD_MISO_PIN = 19;
 constexpr uint8_t SD_MOSI_PIN = 23;

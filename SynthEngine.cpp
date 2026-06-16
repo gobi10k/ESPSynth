@@ -1,7 +1,7 @@
 #include "SynthEngine.h"
 #include "Wavetables.h"
 #include "MathUtils.h"
-#include <driver/i2s.h>
+#include <driver/i2s_std.h>
 #include <math.h>
 
 SynthEngine::SynthEngine() :
@@ -55,41 +55,48 @@ SynthEngine::SynthEngine() :
 bool SynthEngine::init() {
     Wavetables::init();
     
-    i2s_config_t i2sConfig = {
-        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
-        .sample_rate = SAMPLE_RATE,
-        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
-        .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = DMA_BUFFER_COUNT,
-        .dma_buf_len = DMA_BUFFER_SAMPLES,
-        .use_apll = true,
-        .tx_desc_auto_clear = true,
-        .fixed_mclk = 0
-    };
-    
-    i2s_pin_config_t pinConfig = {
-        .mck_io_num = I2S_MCK_PIN,
-        .bck_io_num = I2S_BCK_PIN,
-        .ws_io_num = I2S_WS_PIN,
-        .data_out_num = I2S_DATA_OUT_PIN,
-        .data_in_num = I2S_PIN_NO_CHANGE
-    };
-    
-    esp_err_t err = i2s_driver_install(I2S_NUM_0, &i2sConfig, 0, NULL);
+    // Modern I2S API Configuration
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    esp_err_t err = i2s_new_channel(&chan_cfg, &tx_handle_, NULL);
     if (err != ESP_OK) {
-        Serial.printf("[SynthEngine] I2S install failed: %d\n", err);
+        Serial.printf("[SynthEngine] I2S channel allocation failed: %d\n", err);
+        return false;
+    }
+
+    i2s_std_config_t std_cfg = {
+        .clk_cfg = {
+            .sample_rate_hz = SAMPLE_RATE,
+            .clk_src = I2S_CLK_SRC_APLL,
+            .mclk_multiple = I2S_MCLK_MULTIPLE_256,
+        },
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .gpio_cfg = {
+            .mclk = (gpio_num_t)I2S_MCK_PIN,
+            .bclk = (gpio_num_t)I2S_BCK_PIN,
+            .ws = (gpio_num_t)I2S_WS_PIN,
+            .dout = (gpio_num_t)I2S_DATA_OUT_PIN,
+            .din = I2S_GPIO_UNUSED,
+            .invert_flags = {
+                .mclk_inv = false,
+                .bclk_inv = false,
+                .ws_inv = false,
+            },
+        },
+    };
+
+    err = i2s_channel_init_std_mode(tx_handle_, &std_cfg);
+    if (err != ESP_OK) {
+        Serial.printf("[SynthEngine] I2S standard mode init failed: %d\n", err);
+        return false;
+    }
+
+    err = i2s_channel_enable(tx_handle_);
+    if (err != ESP_OK) {
+        Serial.printf("[SynthEngine] I2S channel enable failed: %d\n", err);
         return false;
     }
     
-    err = i2s_set_pin(I2S_NUM_0, &pinConfig);
-    if (err != ESP_OK) {
-        Serial.printf("[SynthEngine] I2S pin config failed: %d\n", err);
-        return false;
-    }
-    
-    Serial.println("[SynthEngine] Ready");
+    Serial.println("[SynthEngine] Ready (Modern API)");
     return true;
 }
 
@@ -102,7 +109,7 @@ void SynthEngine::start() {
         "SynthTask",
         20480,  // Further increased stack size to 20KB
         this,
-        configMAX_PRIORITIES - 1,
+        configMAX_PRIORITIES - 3, // Slightly lower than max to prevent core starvation
         &audioTaskHandle_,
         1
     );
@@ -460,20 +467,29 @@ void SynthEngine::processBlock() {
             lastArpGate_ = arp_.isGateOn();
         }
         
-        // Mix all voices with panning
+        // Mix all voices with panning - unrolled for 4 voices
         float left = 0.0f;
         float right = 0.0f;
 
-        for (int v = 0; v < NUM_VOICES; v++) {
-            if (voices_[v].isActive()) {
-                float voiceSample = voices_[v].process();
-                // Safety clamp
-                if (voiceSample > 1.0f) voiceSample = 1.0f;
-                if (voiceSample < -1.0f) voiceSample = -1.0f;
-
-                left += voiceSample * voicePanL_[v];
-                right += voiceSample * voicePanR_[v];
-            }
+        if (voices_[0].isActive()) {
+            float s = voices_[0].process();
+            left += s * voicePanL_[0];
+            right += s * voicePanR_[0];
+        }
+        if (voices_[1].isActive()) {
+            float s = voices_[1].process();
+            left += s * voicePanL_[1];
+            right += s * voicePanR_[1];
+        }
+        if (voices_[2].isActive()) {
+            float s = voices_[2].process();
+            left += s * voicePanL_[2];
+            right += s * voicePanR_[2];
+        }
+        if (voices_[3].isActive()) {
+            float s = voices_[3].process();
+            left += s * voicePanL_[3];
+            right += s * voicePanR_[3];
         }
         
         // Scale down for mixing
@@ -534,7 +550,10 @@ void SynthEngine::processBlock() {
     
     profiler_.endSample();
     size_t bytesWritten;
-    i2s_write(I2S_NUM_0, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
+    i2s_channel_write(tx_handle_, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
+
+    // Yield to allow other tasks (Core 0/1) and watchdog to run if CPU is saturated
+    vTaskDelay(0);
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {

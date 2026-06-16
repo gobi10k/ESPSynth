@@ -14,6 +14,7 @@ public:
 
     void listFiles(const char* dirName = "/", uint8_t levels = 0);
     bool exists(const char* path);
+    bool mkdir(const char* path);
 
     bool writeFile(const char* path, const uint8_t* data, size_t len);
     bool readFile(const char* path, uint8_t* data, size_t len);
@@ -24,6 +25,7 @@ public:
 private:
     bool available_;
     uint8_t csPin_;
+    SPIClass* spiBus_;
 };
 
 #endif

@@ -15,7 +15,8 @@ Filter::Filter() :
     low_(0.0f),
     high_(0.0f),
     band_(0.0f),
-    notch_(0.0f)
+    notch_(0.0f),
+    activeOutput_(&low_)
 {
     updateCoefficients(0.0f);
 }
@@ -33,6 +34,13 @@ void Filter::setResonance(float r) {
 
 void Filter::setMode(FilterMode mode) {
     mode_ = mode;
+    switch (mode_) {
+        case FilterMode::LOWPASS:  activeOutput_ = &low_; break;
+        case FilterMode::HIGHPASS: activeOutput_ = &high_; break;
+        case FilterMode::BANDPASS: activeOutput_ = &band_; break;
+        case FilterMode::NOTCH:    activeOutput_ = &notch_; break;
+        default: activeOutput_ = &low_; break;
+    }
 }
 
 void Filter::setKeyTracking(float amount) {
@@ -58,26 +66,3 @@ void Filter::reset() {
     notch_ = 0.0f;
 }
 
-float Filter::process(float input) {
-    // State variable filter iteration (2x oversampled for stability)
-    for (int i = 0; i < 2; i++) {
-        low_ += fMod_ * band_;
-        high_ = input - low_ - q_ * band_;
-        band_ += fMod_ * high_;
-        notch_ = high_ + low_;
-    }
-    
-    // Select output based on mode
-    switch (mode_) {
-        case FilterMode::LOWPASS:
-            return low_;
-        case FilterMode::HIGHPASS:
-            return high_;
-        case FilterMode::BANDPASS:
-            return band_;
-        case FilterMode::NOTCH:
-            return notch_;
-        default:
-            return low_;
-    }
-}

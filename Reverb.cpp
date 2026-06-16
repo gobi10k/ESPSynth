@@ -100,43 +100,72 @@ void FDNReverb::processStereo(float input, float& left, float& right) {
     if (preReadPos < 0) preReadPos += PREDELAY_MAX;
 
     int16_t preDelayed = preDelayBuffer_[preReadPos];
-    preDelayBuffer_[preDelayPos_] = (int16_t)(input * 32000.0f);
+    float clampedInput = input;
+    if (clampedInput > 1.0f) clampedInput = 1.0f;
+    else if (clampedInput < -1.0f) clampedInput = -1.0f;
+    preDelayBuffer_[preDelayPos_] = (int16_t)(clampedInput * 32000.0f);
     preDelayPos_++;
     if (preDelayPos_ >= PREDELAY_MAX) preDelayPos_ = 0;
     
     float preDelayedF = preDelayed / 32000.0f;
     
-    // Read from delay lines
+    // Read from delay lines and apply damping - Unrolled
     float outputs[4];
-    for (int i = 0; i < 4; i++) {
-        int readPos = (int)writePos_[i] - (int)delayTimes_[i];
-        if (readPos < 0) readPos += FDN_MAX_DELAY;
+    int rp;
 
-        outputs[i] = delayLines_[i][readPos] / 32000.0f;
-        
-        // Damping filter
-        dampState_[i] = dampState_[i] * damping_ + outputs[i] * dampingCoef_;
-        outputs[i] = dampState_[i];
-    }
+    rp = (int)writePos_[0] - (int)delayTimes_[0];
+    if (rp < 0) rp += FDN_MAX_DELAY;
+    outputs[0] = delayLines_[0][rp] * 3.125e-5f; // 1/32000
+    dampState_[0] = dampState_[0] * damping_ + outputs[0] * dampingCoef_;
+    outputs[0] = dampState_[0];
+
+    rp = (int)writePos_[1] - (int)delayTimes_[1];
+    if (rp < 0) rp += FDN_MAX_DELAY;
+    outputs[1] = delayLines_[1][rp] * 3.125e-5f;
+    dampState_[1] = dampState_[1] * damping_ + outputs[1] * dampingCoef_;
+    outputs[1] = dampState_[1];
+
+    rp = (int)writePos_[2] - (int)delayTimes_[2];
+    if (rp < 0) rp += FDN_MAX_DELAY;
+    outputs[2] = delayLines_[2][rp] * 3.125e-5f;
+    dampState_[2] = dampState_[2] * damping_ + outputs[2] * dampingCoef_;
+    outputs[2] = dampState_[2];
+
+    rp = (int)writePos_[3] - (int)delayTimes_[3];
+    if (rp < 0) rp += FDN_MAX_DELAY;
+    outputs[3] = delayLines_[3][rp] * 3.125e-5f;
+    dampState_[3] = dampState_[3] * damping_ + outputs[3] * dampingCoef_;
+    outputs[3] = dampState_[3];
     
     // Hadamard mixing (efficient orthogonal)
-    float mixed[4];
-    mixed[0] = 0.5f * (outputs[0] + outputs[1] + outputs[2] + outputs[3]);
-    mixed[1] = 0.5f * (outputs[0] - outputs[1] + outputs[2] - outputs[3]);
-    mixed[2] = 0.5f * (outputs[0] + outputs[1] - outputs[2] - outputs[3]);
-    mixed[3] = 0.5f * (outputs[0] - outputs[1] - outputs[2] + outputs[3]);
+    float m0 = 0.5f * (outputs[0] + outputs[1] + outputs[2] + outputs[3]);
+    float m1 = 0.5f * (outputs[0] - outputs[1] + outputs[2] - outputs[3]);
+    float m2 = 0.5f * (outputs[0] + outputs[1] - outputs[2] - outputs[3]);
+    float m3 = 0.5f * (outputs[0] - outputs[1] - outputs[2] + outputs[3]);
     
-    // Write back with feedback
-    float inputGain = 0.25f;
-    for (int i = 0; i < 4; i++) {
-        float toWrite = mixed[i] * feedbackGain_ + preDelayedF * inputGain;
-        // Soft clip before storing
-        if (toWrite > 1.0f) toWrite = 1.0f;
-        if (toWrite < -1.0f) toWrite = -1.0f;
-        delayLines_[i][writePos_[i]] = (int16_t)(toWrite * 32000.0f);
-        writePos_[i]++;
-        if (writePos_[i] >= FDN_MAX_DELAY) writePos_[i] = 0;
-    }
+    // Write back with feedback - Unrolled
+    float ig = 0.25f;
+    float tw;
+
+    tw = m0 * feedbackGain_ + preDelayedF * ig;
+    if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
+    delayLines_[0][writePos_[0]] = (int16_t)(tw * 32000.0f);
+    if (++writePos_[0] >= FDN_MAX_DELAY) writePos_[0] = 0;
+
+    tw = m1 * feedbackGain_ + preDelayedF * ig;
+    if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
+    delayLines_[1][writePos_[1]] = (int16_t)(tw * 32000.0f);
+    if (++writePos_[1] >= FDN_MAX_DELAY) writePos_[1] = 0;
+
+    tw = m2 * feedbackGain_ + preDelayedF * ig;
+    if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
+    delayLines_[2][writePos_[2]] = (int16_t)(tw * 32000.0f);
+    if (++writePos_[2] >= FDN_MAX_DELAY) writePos_[2] = 0;
+
+    tw = m3 * feedbackGain_ + preDelayedF * ig;
+    if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
+    delayLines_[3][writePos_[3]] = (int16_t)(tw * 32000.0f);
+    if (++writePos_[3] >= FDN_MAX_DELAY) writePos_[3] = 0;
     
     // Stereo Output: split the 4 channels into 2 pairs
     float wetL = (outputs[0] + outputs[1]) * 0.5f;

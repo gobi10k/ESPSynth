@@ -37,7 +37,20 @@ public:
     void setCutoffMod(float mod) { cutoffMod_ = mod; }
     void updateCoefficients(float modHz);
     
-    float process(float input);
+    inline float process(float input) {
+        // State variable filter iteration (2x unrolled for performance and stability)
+        low_ += fMod_ * band_;
+        high_ = input - low_ - q_ * band_;
+        band_ += fMod_ * high_;
+
+        low_ += fMod_ * band_;
+        high_ = input - low_ - q_ * band_;
+        band_ += fMod_ * high_;
+
+        notch_ = high_ + low_;
+
+        return *activeOutput_;
+    }
     
     // Access individual outputs
     float getLowpass() const { return low_; }
@@ -65,6 +78,7 @@ private:
     float high_;
     float band_;
     float notch_;
+    float* activeOutput_;
 };
 
 #endif

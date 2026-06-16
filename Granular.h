@@ -2,6 +2,7 @@
 #define GRANULAR_H
 
 #include "Config.h"
+#include "MathUtils.h"
 
 /**
  * Granular Exciter
@@ -42,6 +43,7 @@ struct Grain {
     float amplitude;
     float position;     // 0-1 within grain duration
     float duration;     // In samples
+    float invDuration;
     GrainSource source;
     GrainWindow window;
 };
@@ -84,22 +86,7 @@ public:
 
 private:
     void spawnGrain();
-    float processGrain(Grain& grain);
-    float getWindow(float position, GrainWindow window);
-    float getSourceSample(Grain& grain);
     
-    // Fast PRNG
-    uint32_t fastRand() {
-        noiseState_ ^= noiseState_ << 13;
-        noiseState_ ^= noiseState_ >> 17;
-        noiseState_ ^= noiseState_ << 5;
-        return noiseState_;
-    }
-
-    float fastRandFloat() {
-        return (float)(fastRand() & 0x7FFFFFFF) / (float)0x7FFFFFFF;
-    }
-
     // Parameters
     float density_;
     float durationMs_;
@@ -114,8 +101,9 @@ private:
     // Grain pool
     Grain grains_[MAX_GRAINS];
     
-    // Window table
+    // Window tables
     static float hannTable_[WINDOW_TABLE_SIZE];
+    static float expTable_[WINDOW_TABLE_SIZE];
     static bool tablesInitialized_;
 
     // Timing

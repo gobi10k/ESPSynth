@@ -1,4 +1,5 @@
 #include "CombFilter.h"
+#include "MathUtils.h"
 #include <math.h>
 #include <string.h>
 
@@ -16,6 +17,7 @@ CombFilter::CombFilter() :
     allpassCoef_(0.5f),
     exciteLevel_(0.0f),
     exciteCounter_(0),
+    noiseState_(44444),
     lastDelayed_(0.0f)
 {
     reset();
@@ -74,11 +76,10 @@ void CombFilter::reset() {
 
 float CombFilter::process(float input) {
     if (isnan(input) || isinf(input)) return 0.0f;
-    if (isnan(delaySamples_) || isinf(delaySamples_)) return input;
 
     // Handle excitation
     if (exciteCounter_ > 0) {
-        float noise = ((float)rand() / RAND_MAX * 2.0f - 1.0f) * exciteLevel_;
+        float noise = fastRandFloat(noiseState_) * exciteLevel_;
         input += noise;
         exciteCounter_--;
     }
@@ -86,16 +87,17 @@ float CombFilter::process(float input) {
     // Read with linear interpolation
     float readPos = (float)writePos_ - delaySamples_;
     if (readPos < 0.0f) readPos += (float)COMB_BUFFER_SIZE;
-    if (readPos < 0.0f) readPos = 0.0f; // Final safety
     
     int readIdx0 = (int)readPos;
-    int readIdx1 = (readIdx0 + 1) % COMB_BUFFER_SIZE;
-    float frac = readPos - readIdx0;
+    int readIdx1 = readIdx0 + 1;
+    if (readIdx1 >= COMB_BUFFER_SIZE) readIdx1 -= COMB_BUFFER_SIZE;
+
+    float frac = readPos - (float)readIdx0;
     
     // Convert int16 to float
-    float s0 = buffer_[readIdx0] / 32000.0f;
-    float s1 = buffer_[readIdx1] / 32000.0f;
-    float delayed = s0 * (1.0f - frac) + s1 * frac;
+    float s0 = buffer_[readIdx0] * 0.00003125f; // 1/32000
+    float s1 = buffer_[readIdx1] * 0.00003125f;
+    float delayed = s0 + frac * (s1 - s0);
     
     // Damping filter
     if (damping_ > 0.0f) {

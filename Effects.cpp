@@ -120,8 +120,8 @@ float Saturation::process(float input) {
         case SaturationType::BITCRUSH: {
             // Reduce bit depth
             float bits = 16.0f / drive_;  // More drive = fewer bits
-            float scale = powf(2.0f, bits);
-            saturated = roundf(driven * scale) / scale;
+            float scale = fastExp2(bits);
+            saturated = (float)((int)(driven * scale)) / scale;
             saturated = constrain(saturated, -1.0f, 1.0f);
             break;
         }
@@ -173,8 +173,13 @@ void Chorus::clear() {
 float Chorus::process(float input) {
     if (isnan(input) || isinf(input)) return 0.0f;
     
+    // Clamp to prevent overflow before conversion to int16
+    float clamped = input;
+    if (clamped > 1.0f) clamped = 1.0f;
+    else if (clamped < -1.0f) clamped = -1.0f;
+
     // Write to buffer (convert to int16)
-    buffer_[writePos_] = (int16_t)(input * 32000.0f);
+    buffer_[writePos_] = (int16_t)(clamped * 32000.0f);
     
     // LFO using wavetable (much faster than sinf)
     float lfoValue = Wavetables::readSine(lfoPhase_);
@@ -191,14 +196,13 @@ float Chorus::process(float input) {
     
     // Read with linear interpolation
     float readPosF = (float)writePos_ - delaySamples;
-    if (readPosF < 0) readPosF += CHORUS_BUFFER_SIZE;
+    if (readPosF < 0.0f) readPosF += (float)CHORUS_BUFFER_SIZE;
     
     int readPos0 = (int)readPosF;
-    if (readPos0 < 0) readPos0 = 0;
-    if (readPos0 >= CHORUS_BUFFER_SIZE) readPos0 = CHORUS_BUFFER_SIZE - 1;
+    int readPos1 = readPos0 + 1;
+    if (readPos1 >= CHORUS_BUFFER_SIZE) readPos1 -= CHORUS_BUFFER_SIZE;
     
-    int readPos1 = (readPos0 + 1) % CHORUS_BUFFER_SIZE;
-    float frac = readPosF - floorf(readPosF);
+    float frac = readPosF - (float)readPos0;
     
     // Convert int16 to float and interpolate
     float s0 = buffer_[readPos0] / 32000.0f;

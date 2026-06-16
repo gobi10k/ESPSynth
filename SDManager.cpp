@@ -1,17 +1,53 @@
 #include "SDManager.h"
 #include <Arduino.h>
 
-SDManager::SDManager() : available_(false), csPin_(SD_CS_PIN) {
+SDManager::SDManager() : available_(false), csPin_(SD_CS_PIN), spiBus_(nullptr) {
 }
 
 bool SDManager::begin(uint8_t csPin) {
     csPin_ = csPin;
 
-    // Initialize SPI for SD card
-    SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, csPin_);
+    // 1. Setup Pins
+    pinMode(csPin_, OUTPUT);
+    digitalWrite(csPin_, HIGH); // Deselect
+    pinMode(SD_MISO_PIN, INPUT_PULLUP);
 
-    if (!SD.begin(csPin_)) {
-        Serial.println("[SD] Initialization failed!");
+    // 2. Initialize dedicated SPI bus (VSPI)
+    if (spiBus_) delete spiBus_;
+    spiBus_ = new SPIClass(VSPI);
+    spiBus_->begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN, -1); // -1: Manual CS
+
+    Serial.println("[SD] SPI (VSPI) instance created.");
+
+    // 3. Hardware Handshake (Reset SD state)
+    // Send 80+ clock cycles with CS high to enter SPI mode
+    Serial.println("[SD] Handshake: Sending 80+ clock pulses with CS HIGH...");
+    spiBus_->beginTransaction(SPISettings(400000, MSBFIRST, SPI_MODE0));
+    digitalWrite(csPin_, HIGH);
+    for (int i = 0; i < 20; i++) { // 160 pulses to be safe
+        spiBus_->transfer(0xFF);
+    }
+    spiBus_->endTransaction();
+
+    // Toggle CS just to "wake up" some controllers
+    digitalWrite(csPin_, LOW);
+    delay(10);
+    digitalWrite(csPin_, HIGH);
+    delay(100);
+
+    // 4. Initialization Loop (Retries at 400kHz)
+    bool success = false;
+    for (int retry = 0; retry < 3; retry++) {
+        Serial.printf("[SD] Attempt %d (400kHz)...\n", retry + 1);
+        if (SD.begin(csPin_, *spiBus_, 400000, "/sd", 5)) {
+            success = true;
+            break;
+        }
+        delay(500);
+    }
+
+    if (!success) {
+        Serial.println("[SD] Critical failure: SD.begin failed after retries.");
         available_ = false;
         return false;
     }
@@ -36,12 +72,15 @@ bool SDManager::begin(uint8_t csPin) {
 }
 
 void SDManager::listFiles(const char* dirName, uint8_t levels) {
-    if (!available_) return;
+    if (!available_) {
+        Serial.println("[SD] Cannot list files: Card not available");
+        return;
+    }
 
-    Serial.printf("[SD] Listing directory: %s\n", dirName);
+    Serial.printf("[SD] Opening directory: %s\n", dirName);
     File root = SD.open(dirName);
     if (!root) {
-        Serial.println("[SD] Failed to open directory");
+        Serial.printf("[SD] Failed to open directory: %s\n", dirName);
         return;
     }
     if (!root.isDirectory()) {
@@ -70,6 +109,11 @@ void SDManager::listFiles(const char* dirName, uint8_t levels) {
 bool SDManager::exists(const char* path) {
     if (!available_) return false;
     return SD.exists(path);
+}
+
+bool SDManager::mkdir(const char* path) {
+    if (!available_) return false;
+    return SD.mkdir(path);
 }
 
 bool SDManager::writeFile(const char* path, const uint8_t* data, size_t len) {
