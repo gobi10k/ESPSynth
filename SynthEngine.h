@@ -279,6 +279,7 @@ private:
     i2s_chan_handle_t tx_handle_;
     AudioProfiler profiler_;
     int16_t blockBuffer_[DMA_BUFFER_SAMPLES * 2];
+    uint8_t lodCounter_ = 0;
 
     // DC blocker state (removes DC offset from filter feedback chains)
     float dcBlockL_ = 0.0f, dcBlockR_ = 0.0f;

@@ -55,6 +55,12 @@ public:
 
     // Tests reverb freeze stability
     static void testReverbFreeze();
+
+    // Verifies all resonator profiles are audible and distinct
+    static void testResonatorProfiles();
+
+    // Checks spectral modules for stability under high resonance sweeps
+    static void testSpectralStability();
 };
 
 #endif

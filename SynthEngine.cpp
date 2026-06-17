@@ -3,6 +3,7 @@
 #include "MathUtils.h"
 #include <driver/i2s_std.h>
 #include <math.h>
+#include <esp_task_wdt.h>
 
 SynthEngine::SynthEngine() :
     pitchBendRange_(2),
@@ -67,6 +68,13 @@ SynthEngine::SynthEngine() :
 
 bool SynthEngine::init() {
     Wavetables::init();
+
+    // Reconfigure Task Watchdog for heavy synthesis load
+    esp_task_wdt_config_t twdt_config = {
+        .timeout_ms = 5000,
+        .idle_core_mask = (1 << 0) | (1 << 1)     // Watch both cores
+    };
+    esp_task_wdt_reconfigure(&twdt_config);
     
     // Modern I2S API Configuration
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
@@ -429,9 +437,16 @@ void SynthEngine::processBlock() {
         }
     }
 
-    // CPU overload protection: if last block exceeded 95%, skip expensive effects
+    // CPU overload protection with Hysteresis
     float cpuLoad = profiler_.getCPUPercent();
-    bool cpuOverload = (cpuLoad > 95.0f);
+    if (cpuLoad > 95.0f) {
+        if (lodCounter_ < 60) lodCounter_++;
+    } else if (cpuLoad < 85.0f) {
+        if (lodCounter_ > 0) lodCounter_--;
+    }
+
+    bool cpuOverload = (lodCounter_ > 15);      // Lite Reverb
+    bool extremeOverload = (lodCounter_ > 45);  // Skip Reverb/Comp
 
     // Massive CPU optimization: Move slow modulation out of the sample loop
     float lfo1 = lfos_[0].process(DMA_BUFFER_SAMPLES);
@@ -461,13 +476,11 @@ void SynthEngine::processBlock() {
 
     // Euclidean
     if (euclideanEnabled_) {
-        bool triggered = false;
-        uint8_t vel = 0;
-        
         for (int s = 0; s < DMA_BUFFER_SAMPLES; s++) {
             if (euclideanSeq_.process()) {
-                triggered = true;
-                vel = euclideanSeq_.getVelocity();
+                uint8_t vel = euclideanSeq_.getVelocity();
+                noteOnInternal(euclideanNote_, vel);
+                if (midiNoteOnCb_) midiNoteOnCb_(1, euclideanNote_, vel);
                 eucGateCounter_ = 0;
                 eucGateOn_ = true;
             }
@@ -485,42 +498,27 @@ void SynthEngine::processBlock() {
                 }
             }
         }
-        if (triggered) {
-            noteOnInternal(euclideanNote_, vel);
-            if (midiNoteOnCb_) midiNoteOnCb_(1, euclideanNote_, vel);
-        }
     }
 
     // Arpeggiator
     if (arp_.getMode() != ArpMode::OFF) {
-        bool triggered = false;
-        uint8_t aNote = 0, aVel = 0;
-        bool gateOff = false;
-        uint8_t offNote = 0;
         for (int s = 0; s < DMA_BUFFER_SAMPLES; s++) {
             if (arp_.process()) {
-                triggered = true;
-                aNote = arp_.getCurrentNote();
-                aVel = arp_.getCurrentVelocity();
+                uint8_t aNote = arp_.getCurrentNote();
+                uint8_t aVel = arp_.getCurrentVelocity();
+                noteOnInternal(aNote, aVel);
+                if (midiNoteOnCb_) midiNoteOnCb_(1, aNote, aVel);
             }
             if (lastArpGate_ && !arp_.isGateOn()) {
-                gateOff = true;
-                offNote = arp_.getCurrentNote();
-            }
-            lastArpGate_ = arp_.isGateOn();
-        }
-
-        if (triggered) {
-            noteOnInternal(aNote, aVel);
-            if (midiNoteOnCb_) midiNoteOnCb_(1, aNote, aVel);
-        }
-        if (gateOff) {
-            for (int v = 0; v < NUM_VOICES; v++) {
-                if (voices_[v].isActive()) {
-                    voices_[v].noteOff();
-                    if (midiNoteOffCb_) midiNoteOffCb_(1, voices_[v].getNote());
+                uint8_t offNote = arp_.getCurrentNote();
+                for (int v = 0; v < NUM_VOICES; v++) {
+                    if (voices_[v].isActive() && voices_[v].getNote() == offNote) {
+                        voices_[v].noteOff();
+                        if (midiNoteOffCb_) midiNoteOffCb_(1, offNote);
+                    }
                 }
             }
+            lastArpGate_ = arp_.isGateOn();
         }
     }
     // --------------------------------------------------
@@ -551,9 +549,17 @@ void SynthEngine::processBlock() {
             right += s * voices_[3].getPanR();
         }
         
-        // Scale down for mixing (1.0 / sqrt(NUM_VOICES))
-        left *= 0.5f;
-        right *= 0.5f;
+        // Scale down for mixing (prevent clipping with 4 voices)
+        left *= 0.35f;
+        right *= 0.35f;
+
+        // DC blocker (Moved up to clean signal before global effects)
+        dcBlockL_ = left - dcInL_ + 0.9975f * dcBlockL_;
+        dcInL_ = left;
+        left = dcBlockL_;
+        dcBlockR_ = right - dcInR_ + 0.9975f * dcBlockR_;
+        dcInR_ = right;
+        right = dcBlockR_;
 
         // Apply Granular processor (if enabled and not in CPU overload)
         if (granularEnabled_ && !cpuOverload) {
@@ -579,34 +585,36 @@ void SynthEngine::processBlock() {
             right += diff;
         }
 
-        // DC blocker (replaces expensive per-sample isnan/isinf checks)
-        // Also removes DC offset from filter feedback and saturation
-        dcBlockL_ = left - dcInL_ + 0.9975f * dcBlockL_;
-        dcInL_ = left;
-        left = dcBlockL_;
-        dcBlockR_ = right - dcInR_ + 0.9975f * dcBlockR_;
-        dcInR_ = right;
-        right = dcBlockR_;
-
         // Process global effects in stereo
         effects_.processStereo(left, right);
 
-        // Reverb - stereo processing
+        // Reverb - stereo processing (skip under extreme overload to prevent crash)
         float wetL, wetR;
-        reverb_.processStereo(left, right, wetL, wetR);
+        if (extremeOverload) {
+            wetL = left;
+            wetR = right;
+        } else {
+            // Use liteMode (no diffusion) if CPU is high
+            reverb_.processStereo(left, right, wetL, wetR, cpuOverload);
+        }
 
         // Compressor on stereo (before master volume and soft clip)
         float compL, compR;
-        compressor_.processStereo(wetL, wetR, compL, compR);
+        if (extremeOverload) {
+            compL = wetL;
+            compR = wetR;
+        } else {
+            compressor_.processStereo(wetL, wetR, compL, compR);
+        }
 
         // Master volume
         float vol = masterVolume_.process();
         left = compL * vol;
         right = compR * vol;
         
-        // Final soft clip / limiter - use tanh for gentle saturation
-        left = fastTanh(left);
-        right = fastTanh(right);
+        // Final soft clip / limiter - reduced drive for better headroom
+        left = fastTanh(left * 0.85f);
+        right = fastTanh(right * 0.85f);
         
         blockBuffer_[i * 2] = (int16_t)(left * 32767.0f);
         blockBuffer_[i * 2 + 1] = (int16_t)(right * 32767.0f);
@@ -617,14 +625,22 @@ void SynthEngine::processBlock() {
     i2s_channel_write(tx_handle_, blockBuffer_, sizeof(blockBuffer_), &bytesWritten, portMAX_DELAY);
 
     // Feed watchdog — essential to prevent crash under high CPU load
-    // vTaskDelay(1) yields to the IDLE task which feeds the task watchdog
-    vTaskDelay(1);
+    // vTaskDelay(0) yields to other tasks without unnecessary 1ms wait
+    vTaskDelay(0);
+    esp_task_wdt_reset();
 }
 
 void SynthEngine::audioTaskWrapper(void* param) {
     SynthEngine* engine = static_cast<SynthEngine*>(param);
+
+    // Subscribe this task to the Task Watchdog Timer (TWDT)
+    esp_task_wdt_add(NULL);
+
     while (engine->running_) {
         engine->processBlock();
     }
+
+    // Unsubscribe before deleting
+    esp_task_wdt_delete(NULL);
     vTaskDelete(NULL);
 }

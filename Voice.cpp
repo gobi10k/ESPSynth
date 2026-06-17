@@ -131,8 +131,17 @@ float Voice::process() {
 
     float sample = oscOutput;
 
-    // Update filter envelope and coefficients every 4 samples for performance
+    // Update filter and pitch every 4 samples for performance
     if ((age_ & 0x03) == 0) {
+        // Pitch smoothing (Glide/Legato)
+        float freq = targetFreq_;
+        if (pitchSmooth_.getSmoothTime() > 0.0f) {
+            freq = pitchSmooth_.process();
+        }
+        osc_[0].setFrequency(freq);
+        osc_[1].setFrequency(freq);
+
+        // Filter envelope
         float filterEnvVal = filterEnv_.process();
 
         // Apply velocity scaling to filter envelope amount
@@ -250,7 +259,7 @@ void Voice::setPan(float pan) {
 }
 
 void Voice::setGlideTime(float ms) {
-    pitchSmooth_.setSmoothTime(ms);
+    pitchSmooth_.setSmoothTime(ms, SAMPLE_RATE / 4.0f);
 }
 
 void Voice::applyParams(const GlobalVoiceParams& p) {
@@ -287,15 +296,8 @@ void Voice::applyParams(const GlobalVoiceParams& p) {
 void Voice::updateBlockParams() {
     if (state_ == VoiceState::FREE) return;
 
-    // Smooth frequency once per block
-    float freq = targetFreq_;
-    if (pitchSmooth_.getSmoothTime() > 0.0f) {
-        freq = pitchSmooth_.process();
-    }
-
-    // Apply frequency and global modulations once per block
-    osc_[0].setFrequency(freq);
-    osc_[1].setFrequency(freq);
+    // Apply global modulations once per block
+    // (Individual pitch/cutoff are updated every 4 samples in process())
     osc_[0].setPitchMod(globalPitchMod_);
     osc_[1].setPitchMod(globalPitchMod_);
     osc_[0].setPWMod(globalOsc1PWMod_);

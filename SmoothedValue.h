@@ -18,13 +18,13 @@ public:
         setSmoothTime(smoothTimeMs);
     }
     
-    void setSmoothTime(float ms) {
+    void setSmoothTime(float ms, float sampleRate = SAMPLE_RATE) {
         smoothTime_ = ms;
         if (ms <= 0.0f) {
             coef_ = 1.0f;  // Instant
         } else {
             // Time constant for ~99% convergence
-            coef_ = 1.0f - expf(-1000.0f / (ms * SAMPLE_RATE));
+            coef_ = 1.0f - expf(-1000.0f / (ms * sampleRate));
         }
     }
     

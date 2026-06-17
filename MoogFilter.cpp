@@ -48,7 +48,7 @@ void MoogFilter::reset() {
 }
 
 float MoogFilter::process(float input) {
-    if (isnan(input) || isinf(input)) input = 0.0f;
+    if (SAFE_CHECK(input)) input = 0.0f;
     
     float feedback = resonance_ * 4.0f;
     input *= drive_;
@@ -76,10 +76,7 @@ float MoogFilter::process(float input) {
     float output = stage_[3] * (1.0f + feedback * 0.3f);
     output = fastPolyClip(output);
 
-    if (isnan(output) || isinf(output)) {
-        reset();
-        return 0.0f;
-    }
+    CHECK_AND_RESET(output, *this);
 
     return output / drive_;
 }
@@ -189,15 +186,16 @@ void LadderFilter::reset() {
 }
 
 float LadderFilter::process(float input) {
-    if (isnan(input) || isinf(input)) input = 0.0f;
+    if (SAFE_CHECK(input)) input = 0.0f;
     
     float feedback = resonance_ * 3.5f;
     float in = input * drive_;
     
-    in = fastPolyClip(in * 0.5f) * 2.0f;
+    // Faster saturation for internal ladder path
+    in = fastPolyClip(in * 0.5f) * 1.2f;
     
     float fb = delay_[3] * feedback;
-    fb = fastPolyClip(fb);
+    fb = fastPolyClip(fb * 0.5f);
     in -= fb;
     
     // Four stages - unrolled
@@ -226,10 +224,7 @@ float LadderFilter::process(float input) {
     
     output = fastPolyClip(output);
     
-    if (isnan(output) || isinf(output)) {
-        reset();
-        return 0.0f;
-    }
+    CHECK_AND_RESET(output, *this);
 
     return output / drive_;
 }

@@ -40,7 +40,7 @@ public:
     bool isFrozen() const { return frozen_; }
     
     float process(float input);
-    void processStereo(float inL, float inR, float& outL, float& outR);
+    void processStereo(float inL, float inR, float& outL, float& outR, bool liteMode = false);
     void reset();
 
 private:

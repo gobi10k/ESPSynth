@@ -444,7 +444,7 @@ void printHelp() {
     Serial.println("  sa<val>    FM amount");
     Serial.println("");
     Serial.println("-- Filter --");
-    Serial.println("  ft<0-3>    Type (SVF/Ladder/Resonator/Comb)");
+    Serial.println("  ft<0-3>    Type (0:SVF, 1:Ladder, 2:RESO, 3:COMB)");
     Serial.println("  c<hz>      Cutoff");
     Serial.println("  r<0-99>    Resonance %");
     Serial.println("  fm<0-3>    Mode (lp/hp/bp/notch)");
@@ -645,8 +645,17 @@ void processCommand(const String& cmd) {
             break;
         case 'f':
             if (c1 == 't') {
-                synth.setFilterType((VoiceFilterType)((int)value % 2));
-                Serial.printf("Filter type: %s\n", VOICE_FILTER_NAMES[(int)value % 2]);
+                int type = (int)value % 4;
+                if (type < 2) {
+                    synth.setFilterType((VoiceFilterType)type);
+                    Serial.printf("Filter type: %s\n", VOICE_FILTER_NAMES[type]);
+                } else if (type == 2) {
+                    synth.setResonatorEnabled(true);
+                    Serial.println("Filter: GLOBAL RESONATOR enabled");
+                } else if (type == 3) {
+                    synth.setCombEnabled(true);
+                    Serial.println("Filter: GLOBAL COMB enabled");
+                }
             } else if (c1 == 'm') {
                 synth.setFilterMode((FilterMode)((int)value % 4));
                 Serial.printf("Filter: %s\n", FILTER_MODE_NAMES[(int)value % 4]);
