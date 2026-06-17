@@ -8,7 +8,7 @@ const char* MOD_SOURCE_NAMES[] = {
 const char* MOD_DEST_NAMES[] = {
     "NONE", "PITCH", "O1.P", "O2.P", "O.MIX",
     "F.CUT", "F.RES", "AMP", "L1.RT", "L2.RT",
-    "D.TIM", "D.FB", "CH.DP"
+    "D.TIM", "D.FB", "CH.DP", "O1.PW", "O2.PW"
 };
 
 ModMatrix::ModMatrix() {

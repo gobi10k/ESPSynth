@@ -14,16 +14,22 @@ public:
     void setWaveform(Waveform wf);
     void setAmplitude(float amp);
     void setDetune(float cents);      // Detune in cents (-100 to +100)
+    void setCoarse(int8_t semitones); // Coarse tune in semitones
+    void setSupersawDetune(float d);  // 0.0 to 1.0 scaling
     void setPulseWidth(float pw);     // 0.1 to 0.9 for pulse wave
     
     float getFrequency() const { return frequency_; }
     Waveform getWaveform() const { return waveform_; }
     float getAmplitude() const { return amplitude_; }
     float getDetune() const { return detuneCents_; }
+    int8_t getCoarse() const { return coarseTune_; }
     float getPulseWidth() const { return pulseWidth_; }
+    void setMorph(float morph) { morph_ = constrain(morph, 0.0f, 1.0f); }
+    float getMorph() const { return morph_; }
     
     // Modulation inputs (call before process())
     void setFMMod(float mod) { fmMod_ = mod; }
+    void setPWMod(float mod) { pwMod_ = mod; }
     void setPitchMod(float semitones);
     
     // Processing
@@ -36,7 +42,10 @@ public:
             case Waveform::TRIANGLE: sample = Wavetables::readTriangle(phase_, tableIndex_); break;
             case Waveform::PULSE: {
                 float t = phase_ * PHASE_TO_FLOAT;
-                sample = (t < pulseWidth_) ? 1.0f : -1.0f;
+                float effectivePW = pulseWidth_ + pwMod_;
+                if (effectivePW < 0.05f) effectivePW = 0.05f;
+                if (effectivePW > 0.95f) effectivePW = 0.95f;
+                sample = (t < effectivePW) ? 1.0f : -1.0f;
                 sample = lastPulse_ * 0.3f + sample * 0.7f;
                 lastPulse_ = sample;
                 break;
@@ -64,7 +73,10 @@ public:
             case Waveform::TRIANGLE: sample = Wavetables::readTriangle(phase_, tableIndex_); break;
             case Waveform::PULSE: {
                 float t = phase_ * PHASE_TO_FLOAT;
-                sample = (t < pulseWidth_) ? 1.0f : -1.0f;
+                float effectivePW = pulseWidth_ + pwMod_;
+                if (effectivePW < 0.05f) effectivePW = 0.05f;
+                if (effectivePW > 0.95f) effectivePW = 0.95f;
+                sample = (t < effectivePW) ? 1.0f : -1.0f;
                 sample = lastPulse_ * 0.3f + sample * 0.7f;
                 lastPulse_ = sample;
                 break;
@@ -114,10 +126,15 @@ private:
     // Extended parameters
     float detuneCents_;
     float detuneMultiplier_;
+    int8_t coarseTune_;
+    float coarseMultiplier_;
+    float supersawDetune_;
     float pulseWidth_;
+    float morph_;
     
     // Modulation
     float fmMod_;
+    float pwMod_;
     float pitchMod_;
     float pitchMult_;
     

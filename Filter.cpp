@@ -16,7 +16,8 @@ Filter::Filter() :
     high_(0.0f),
     band_(0.0f),
     notch_(0.0f),
-    activeOutput_(&low_)
+    activeOutput_(&low_),
+    lastInput_(0.0f)
 {
     updateCoefficients(0.0f);
 }
@@ -64,5 +65,6 @@ void Filter::reset() {
     high_ = 0.0f;
     band_ = 0.0f;
     notch_ = 0.0f;
+    lastInput_ = 0.0f;
 }
 

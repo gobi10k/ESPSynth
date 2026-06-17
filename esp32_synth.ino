@@ -62,6 +62,9 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
         case MIDI_CC::MOD_WHEEL:
             synth.getLFO(0).setDepth(val / 127.0f);
             break;
+        case MIDI_CC::SUSTAIN:
+            synth.setSustainPedal(val >= 64);
+            break;
         case MIDI_CC::VOLUME:
             synth.setMasterVolume(val / 127.0f);
             break;
@@ -159,6 +162,10 @@ void applyPreset(const PresetData& p) {
     synth.setOscWaveform(1, (Waveform)p.osc2Wave);
     synth.setOscDetune(0, p.osc1Detune);
     synth.setOscDetune(1, p.osc2Detune);
+    synth.setOscCoarse(0, p.osc1Coarse);
+    synth.setOscCoarse(1, p.osc2Coarse);
+    synth.setOscSupersawDetune(0, p.osc1SupersawDetune / 100.0f);
+    synth.setOscSupersawDetune(1, p.osc2SupersawDetune / 100.0f);
     synth.setOscMix(p.oscMix / 100.0f);
     
     synth.setFilterCutoff(p.filterCutoff);
@@ -166,7 +173,7 @@ void applyPreset(const PresetData& p) {
     synth.setFilterMode((FilterMode)p.filterMode);
     synth.setFilterType((VoiceFilterType)p.filterType);
     synth.setSynthMode((VoiceSynthMode)p.synthMode);
-    synth.setFMAmount(p.fmAmount / 10.0f);  // Scale 0-255 to 0-25.5
+    synth.setFMAmount(p.fmAmount / 10.0f);
     synth.setFilterEnvAmount(p.filterEnvAmount / 100.0f);
     synth.setFilterEnvVelocity(p.filterEnvVel / 100.0f);
     synth.setFilterKeyTracking(p.filterKeyTrack / 100.0f);
@@ -193,6 +200,11 @@ void applyPreset(const PresetData& p) {
     chorusEnabled = p.effectFlags & 0x02;
     delayEnabled = p.effectFlags & 0x04;
     synth.getEffects().setEnabled(satEnabled, chorusEnabled, delayEnabled);
+    synth.getReverb().setEnabled(p.effectFlags & 0x08);
+    synth.getCompressor().setEnabled(p.effectFlags & 0x10);
+    synth.setResonatorEnabled(p.effectFlags & 0x20);
+    synth.setCombEnabled(p.effectFlags & 0x40);
+    synth.setGranularEnabled(p.effectFlags & 0x80);
     
     synth.getEffects().saturation.setDrive(p.satDrive / 10.0f);
     synth.getEffects().saturation.setType((SaturationType)p.satType);
@@ -202,8 +214,36 @@ void applyPreset(const PresetData& p) {
     synth.getEffects().delay.setFeedback(p.delayFeedback / 100.0f);
     synth.getEffects().delay.setMix(p.delayMix / 100.0f);
     
+    synth.getReverb().setDecay(p.revDecay / 10.0f);
+    synth.getReverb().setSize(p.revSize / 100.0f);
+    synth.getReverb().setDamping(p.revDamp / 100.0f);
+    synth.getReverb().setMix(p.revMix / 100.0f);
+    synth.getReverb().setPreDelay(p.revPre);
+
+    synth.getCompressor().setThreshold(p.compThresh);
+    synth.getCompressor().setRatio(p.compRatio / 10.0f);
+    synth.getCompressor().setAttack(p.compAttack);
+    synth.getCompressor().setRelease(p.compRelease * 10.0f);
+    synth.getCompressor().setMakeupGain(p.compMakeup);
+
+    synth.getResonator().setProfile((ResonatorProfile)p.resProfile);
+    synth.getResonator().setResonance(p.resReso);
+    synth.getResonator().setDamping(p.resDamp / 100.0f);
+    synth.getResonator().setBrightness(p.resBright / 100.0f);
+    synth.getResonator().setMix(p.resMix / 100.0f);
+
+    synth.getComb().setPitch(p.combPitch);
+    synth.getComb().setFeedback(p.combFB / 100.0f);
+    synth.getComb().setDamping(p.combDamp / 100.0f);
+    synth.getComb().setMix(p.combMix / 100.0f);
+
+    synth.getGranular().setDensity(p.granDensity);
+    synth.getGranular().setDuration(p.granDuration);
+    synth.getGranular().setGranularMix(p.granMix / 100.0f);
+    synth.getGranular().setSource((GrainSource)p.granSource);
+
     synth.setGlideTime(p.glideTime);
-    synth.setMasterVolume(p.masterVolume / 100.0f);
+    synth.setLegato(p.legato != 0);
     synth.setGlobalPan(p.globalPan / 100.0f);
     
     Serial.printf("Loaded: %s\n", p.name);
@@ -211,25 +251,72 @@ void applyPreset(const PresetData& p) {
 
 PresetData createPresetFromCurrent(const char* name) {
     PresetData p = PresetManager::getInitPreset();
-    strncpy(p.name, name, 15);
+    p.version = 2;
+    strncpy(p.name, name, 14);
     
     p.osc1Wave = (uint8_t)synth.getOscWaveform(0);
     p.osc2Wave = (uint8_t)synth.getOscWaveform(1);
     p.osc1Detune = (int8_t)synth.getOscDetune(0);
     p.osc2Detune = (int8_t)synth.getOscDetune(1);
+    p.osc1Coarse = (int8_t)synth.getVoice(0).getOscCoarse(0); // Coarse and other params should be in synth too
+    p.osc2Coarse = (int8_t)synth.getVoice(0).getOscCoarse(1);
     p.oscMix = (uint8_t)(synth.getOscMix() * 100.0f);
+    p.osc1SupersawDetune = (uint8_t)(synth.getVoice(0).getOscSupersawDetune(0) * 100.0f);
+    p.osc2SupersawDetune = (uint8_t)(synth.getVoice(0).getOscSupersawDetune(1) * 100.0f);
 
     p.filterCutoff = (uint16_t)synth.getFilterCutoff();
     p.filterReso = (uint8_t)(synth.getFilterResonance() * 100.0f);
     p.filterMode = (uint8_t)synth.getFilterMode();
     p.filterType = (uint8_t)synth.getFilterType();
+    p.filterEnvAmount = (int8_t)(synth.getFilterEnvAmount() * 100.0f);
     p.synthMode = (uint8_t)synth.getSynthMode();
     p.fmAmount = (uint8_t)(synth.getFMAmount() * 10.0f);
     p.filterEnvVel = (uint8_t)(synth.getFilterEnvVelocity() * 100.0f);
     p.filterKeyTrack = (uint8_t)(synth.getFilterKeyTracking() * 100.0f);
     p.globalPan = (int8_t)(synth.getGlobalPan() * 100.0f);
+    p.glideTime = (uint16_t)synth.getGlideTime();
+    p.legato = synth.getLegato() ? 1 : 0;
     
-    p.effectFlags = (satEnabled ? 1 : 0) | (chorusEnabled ? 2 : 0) | (delayEnabled ? 4 : 0);
+    p.effectFlags = (satEnabled ? 0x01 : 0) | (chorusEnabled ? 0x02 : 0) | (delayEnabled ? 0x04 : 0) |
+                    (synth.getReverb().isEnabled() ? 0x08 : 0) | (synth.getCompressor().isEnabled() ? 0x10 : 0) |
+                    (synth.isResonatorEnabled() ? 0x20 : 0) | (synth.isCombEnabled() ? 0x40 : 0) |
+                    (synth.isGranularEnabled() ? 0x80 : 0);
+
+    p.satDrive = (uint8_t)(synth.getEffects().saturation.getDrive() * 10.0f);
+    p.satType = (uint8_t)synth.getEffects().saturation.getType();
+    p.chorusRate = (uint8_t)(synth.getEffects().chorus.getRate() * 100.0f);
+    p.chorusDepth = (uint8_t)(synth.getEffects().chorus.getDepth() * 100.0f);
+    p.delayTime = (uint16_t)(synth.getEffects().delay.getTime() * 1000.0f);
+    p.delayFeedback = (uint8_t)(synth.getEffects().delay.getFeedback() * 100.0f);
+    p.delayMix = (uint8_t)(synth.getEffects().delay.getMix() * 100.0f);
+
+    p.revDecay = (uint8_t)(synth.getReverb().getDecay() * 10.0f);
+    p.revSize = (uint8_t)(synth.getReverb().getSize() * 100.0f);
+    p.revDamp = (uint8_t)(synth.getReverb().getDamping() * 100.0f);
+    p.revMix = (uint8_t)(synth.getReverb().getMix() * 100.0f);
+    p.revPre = (uint8_t)synth.getReverb().getPreDelay();
+
+    p.compThresh = (int8_t)synth.getCompressor().getThreshold();
+    p.compRatio = (uint8_t)(synth.getCompressor().getRatio() * 10.0f);
+    p.compAttack = (uint8_t)synth.getCompressor().getAttack();
+    p.compRelease = (uint8_t)(synth.getCompressor().getRelease() / 10.0f);
+    p.compMakeup = (uint8_t)synth.getCompressor().getMakeupGain();
+
+    p.resProfile = (uint8_t)synth.getResonator().getProfile();
+    p.resReso = (uint8_t)synth.getResonator().getResonance();
+    p.resDamp = (uint8_t)(synth.getResonator().getDamping() * 100.0f);
+    p.resBright = (uint8_t)(synth.getResonator().getBrightness() * 100.0f);
+    p.resMix = (uint8_t)(synth.getResonator().getMix() * 100.0f);
+
+    p.combPitch = (uint16_t)synth.getComb().getPitch();
+    p.combFB = (uint8_t)(synth.getComb().getFeedback() * 100.0f);
+    p.combDamp = (uint8_t)(synth.getComb().getDamping() * 100.0f);
+    p.combMix = (uint8_t)(synth.getComb().getMix() * 100.0f);
+
+    p.granDensity = (uint8_t)synth.getGranular().getDensity();
+    p.granDuration = (uint16_t)synth.getGranular().getDuration();
+    p.granMix = (uint8_t)(synth.getGranularMix() * 100.0f);
+    p.granSource = (uint8_t)synth.getGranular().getSource();
     
     return p;
 }
@@ -297,6 +384,10 @@ void setup() {
 
     // Setup MIDI
     midi.begin(16, 17);  // RX=16, TX=17
+    synth.setMIDIOUTCallback(
+        [](uint8_t ch, uint8_t n, uint8_t v) { midi.sendNoteOn(n, v, ch); },
+        [](uint8_t ch, uint8_t n) { midi.sendNoteOff(n, ch); }
+    );
     midi.setNoteOnCallback(onMIDINoteOn);
     midi.setNoteOffCallback(onMIDINoteOff);
     midi.setCCCallback(onMIDICC);
@@ -337,6 +428,8 @@ void printHelp() {
     Serial.println("  w2<0-6>    Osc2 wave");
     Serial.println("  d1<cents>  Osc1 detune");
     Serial.println("  d2<cents>  Osc2 detune");
+    Serial.println("  o1s<0-99>  Osc1 supersaw detune %");
+    Serial.println("  o2s<0-99>  Osc2 supersaw detune %");
     Serial.println("  om<0-99>   Osc mix %");
     Serial.println("  sm<0-3>    Synth mode (std/fm/sync/ring)");
     Serial.println("  sa<val>    FM amount");
@@ -396,6 +489,7 @@ void printHelp() {
     Serial.println("  Rh<0-99>   Damping (HF) %");
     Serial.println("  Rm<0-99>   Mix %");
     Serial.println("  Rp<ms>     Pre-delay");
+    Serial.println("  Rf         Toggle freeze");
     Serial.println("");
     Serial.println("-- Effects --");
     Serial.println("  sx/Cx/dx   Toggle sat/chorus/delay");
@@ -418,6 +512,7 @@ void printHelp() {
     Serial.println("");
     Serial.println("-- Other --");
     Serial.println("  gl<ms>     Glide time");
+    Serial.println("  lg<0-1>    Legato mode");
     Serial.println("  v<0-99>    Master volume %");
     Serial.println("  z          Print CPU statistics");
     Serial.println("  p          Toggle auto CPU stats");
@@ -497,6 +592,12 @@ void processCommand(const String& cmd) {
             if (c1 == 'm') {
                 synth.setOscMix(value / 100.0f);
                 Serial.printf("Osc mix: %.0f%%\n", value);
+            } else if (cmd.startsWith("o1s")) {
+                synth.setOscSupersawDetune(0, value / 100.0f);
+                Serial.printf("Osc1 SS detune: %.0f%%\n", value);
+            } else if (cmd.startsWith("o2s")) {
+                synth.setOscSupersawDetune(1, value / 100.0f);
+                Serial.printf("Osc2 SS detune: %.0f%%\n", value);
             }
             break;
             
@@ -608,9 +709,38 @@ void processCommand(const String& cmd) {
             }
             break;
             
+        // === EUCLIDEAN ===
+        case 'E':
+            if (c1 == 'x') {
+                synth.setEuclideanEnabled(!synth.isEuclideanEnabled());
+                Serial.printf("Euclidean: %s\n", synth.isEuclideanEnabled() ? "ON" : "OFF");
+            } else if (c1 == 's') {
+                synth.getEuclidean().setSteps((uint8_t)value);
+                Serial.printf("Euclidean steps: %d\n", (int)value);
+            } else if (c1 == 'p') {
+                synth.getEuclidean().setPulses((uint8_t)value);
+                Serial.printf("Euclidean pulses: %d\n", (int)value);
+            } else if (c1 == 'r') {
+                synth.getEuclidean().setRotation((uint8_t)value);
+                Serial.printf("Euclidean rotation: %d\n", (int)value);
+            } else if (c1 == 'w') {
+                synth.getEuclidean().setSwing(value / 100.0f);
+                Serial.printf("Euclidean swing: %.0f%%\n", value);
+            } else if (c1 == 'b') {
+                synth.getEuclidean().setTempo(value);
+                Serial.printf("Euclidean tempo: %.0f\n", value);
+            } else if (c1 == 'n') {
+                synth.setEuclideanNote((uint8_t)value);
+                Serial.printf("Euclidean note: %d\n", (int)value);
+            }
+            break;
+
         // === LFO ===
         case 'l':
-            if (c1 == 'f') {
+            if (c1 == 'g') {
+                synth.setLegato(value > 0);
+                Serial.printf("Legato: %s\n", synth.getLegato() ? "ON" : "OFF");
+            } else if (c1 == 'f') {
                 synth.getLFO(selectedLFO).setFrequency(value);
                 Serial.printf("LFO%d: %.2fHz\n", selectedLFO + 1, value);
             } else if (c1 == 'w') {
@@ -691,6 +821,10 @@ void processCommand(const String& cmd) {
             } else if (c1 == 'p') {
                 synth.getReverb().setPreDelay(value);
                 Serial.printf("Reverb pre: %.0fms\n", value);
+            } else if (c1 == 'f') {
+                bool f = !synth.getReverb().isFrozen();
+                synth.getReverb().setFreeze(f);
+                Serial.printf("Reverb freeze: %s\n", f ? "ON" : "OFF");
             }
             break;
             
@@ -908,6 +1042,9 @@ void processCommand(const String& cmd) {
         case 'G':
         case 'g':
             if (c1 == 'l') {
+                synth.setGlideTime(value);
+                Serial.printf("Glide: %.0fms\n", value);
+            } else if (c0 == 'g' && c1 == 'l') { // glide
                 synth.setGlideTime(value);
                 Serial.printf("Glide: %.0fms\n", value);
             } else if (c1 == 'x') {

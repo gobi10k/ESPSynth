@@ -21,7 +21,9 @@ Voice::Voice() :
     globalFilterMod_(0.0f),
     globalPitchMod_(0.0f),
     targetFreq_(440.0f),
-    pan_(0.0f)
+    pan_(0.0f),
+    panL_(0.707f),
+    panR_(0.707f)
 {
     osc_[0].setWaveform(Waveform::SAW);
     osc_[0].setAmplitude(1.0f);
@@ -45,7 +47,7 @@ float Voice::midiToFreq(uint8_t note) {
     return 440.0f * powf(2.0f, (note - 69) / 12.0f);
 }
 
-void Voice::noteOn(uint8_t note, uint8_t velocity) {
+void Voice::noteOn(uint8_t note, uint8_t velocity, bool glide) {
     note_ = note;
     velocity_ = velocity;
     velScalar_ = velocity / 127.0f;
@@ -56,10 +58,10 @@ void Voice::noteOn(uint8_t note, uint8_t velocity) {
     svf_.setKeyFreq(targetFreq_);
     ladder_.setKeyFreq(targetFreq_);
     
-    if (pitchSmooth_.getCurrent() == 0.0f) {
-        pitchSmooth_.setImmediate(targetFreq_);
-    } else {
+    if (glide || pitchSmooth_.getCurrent() == 0.0f) {
         pitchSmooth_.setTarget(targetFreq_);
+    } else {
+        pitchSmooth_.setImmediate(targetFreq_);
     }
     
     ampEnv_.gate(true);
@@ -126,8 +128,8 @@ float Voice::process() {
 
     float sample = oscOutput;
 
-    // Update filter envelope and coefficients every 8 samples for performance
-    if ((age_ & 0x07) == 0) {
+    // Update filter envelope and coefficients every 4 samples for performance
+    if ((age_ & 0x03) == 0) {
         float filterEnvVal = filterEnv_.process();
 
         // Apply velocity scaling to filter envelope amount
@@ -235,8 +237,48 @@ void Voice::setFilterADSR(float a, float d, float s, float r) {
     filterEnv_.setADSR(a, d, s, r);
 }
 
+void Voice::setPan(float pan) {
+    pan = constrain(pan, -1.0f, 1.0f);
+    if (pan == pan_) return;
+    pan_ = pan;
+    float panAngle = (pan + 1.0f) * 0.785398f;
+    panL_ = cosf(panAngle);
+    panR_ = sinf(panAngle);
+}
+
 void Voice::setGlideTime(float ms) {
     pitchSmooth_.setSmoothTime(ms);
+}
+
+void Voice::applyParams(const GlobalVoiceParams& p) {
+    setOscWaveform(0, p.oscWaveforms[0]);
+    setOscWaveform(1, p.oscWaveforms[1]);
+    setOscDetune(0, p.oscDetune[0]);
+    setOscDetune(1, p.oscDetune[1]);
+    osc_[0].setCoarse(p.oscCoarse[0]);
+    osc_[1].setCoarse(p.oscCoarse[1]);
+    osc_[0].setSupersawDetune(p.oscSupersawDetune[0]);
+    osc_[1].setSupersawDetune(p.oscSupersawDetune[1]);
+    setOscMix(p.oscMix);
+    osc_[0].setPulseWidth(p.pulseWidth[0]);
+    osc_[1].setPulseWidth(p.pulseWidth[1]);
+    osc_[0].setMorph(p.morph[0]);
+    osc_[1].setMorph(p.morph[1]);
+
+    setSynthMode(p.synthMode);
+    setFMAmount(p.fmAmount);
+
+    setFilterType(p.filterType);
+    setFilterCutoff(p.filterCutoff);
+    setFilterResonance(p.filterReso);
+    setFilterMode(p.filterMode);
+    setFilterEnvAmount(p.filterEnvAmount);
+    setFilterEnvVelocity(p.filterEnvVelocity);
+    setFilterKeyTracking(p.filterKeyTracking);
+
+    setAmpADSR(p.ampA, p.ampD, p.ampS, p.ampR);
+    setFilterADSR(p.fltA, p.fltD, p.fltS, p.fltR);
+    setGlideTime(p.glideTime);
 }
 
 void Voice::updateBlockParams() {
@@ -253,4 +295,6 @@ void Voice::updateBlockParams() {
     osc_[1].setFrequency(freq);
     osc_[0].setPitchMod(globalPitchMod_);
     osc_[1].setPitchMod(globalPitchMod_);
+    osc_[0].setPWMod(globalOsc1PWMod_);
+    osc_[1].setPWMod(globalOsc2PWMod_);
 }

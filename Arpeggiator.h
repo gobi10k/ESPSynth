@@ -31,6 +31,8 @@ public:
     ArpMode getMode() const { return mode_; }
     float getTempo() const { return tempo_; }
     uint8_t getDivision() const { return division_; }
+    float getGateLength() const { return gateLength_; }
+    uint8_t getOctaveRange() const { return octaveRange_; }
     
     // Note input
     void noteOn(uint8_t note, uint8_t velocity);
@@ -71,7 +73,7 @@ private:
     uint8_t sortedVelocities_[ARP_MAX_NOTES];
     
     // Playback state
-    int8_t stepIndex_;
+    int16_t stepIndex_;
     int8_t direction_;  // 1 or -1
     uint8_t currentOctave_;
     uint8_t currentNote_;

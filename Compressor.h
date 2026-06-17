@@ -20,9 +20,13 @@ public:
     
     float getThreshold() const { return thresholdDb_; }
     float getRatio() const { return ratio_; }
+    float getAttack() const { return attackMs_; }
+    float getRelease() const { return releaseMs_; }
+    float getMakeupGain() const { return makeupGainDb_; }
     float getGainReduction() const { return gainReductionDb_; }
     
     float process(float input);
+    void processStereo(float inL, float inR, float& outL, float& outR);
     void setEnabled(bool enabled) { enabled_ = enabled; }
     bool isEnabled() const { return enabled_; }
 
@@ -30,8 +34,11 @@ private:
     float thresholdDb_;
     float thresholdLin_;
     float ratio_;
+    float attackMs_;
     float attackCoef_;
+    float releaseMs_;
     float releaseCoef_;
+    float makeupGainDb_;
     float makeupGain_;
     float kneeWidth_;
     float kneeHalf_;

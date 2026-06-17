@@ -11,7 +11,8 @@ FDNReverb::FDNReverb() :
     roomSize_(0.5f),
     damping_(0.5f),
     mix_(0.3f),
-    enabled_(false)
+    enabled_(false),
+    frozen_(false)
 {
     reset();
     
@@ -20,6 +21,7 @@ FDNReverb::FDNReverb() :
         dampState_[i] = 0.0f;
     }
     
+    diffPos1_ = diffPos2_ = 0;
     updateDecayCoefficients();
 }
 
@@ -30,6 +32,9 @@ void FDNReverb::reset() {
     }
     memset(preDelayBuffer_, 0, sizeof(preDelayBuffer_));
     preDelayPos_ = 0;
+    memset(diffBuf1_, 0, sizeof(diffBuf1_));
+    memset(diffBuf2_, 0, sizeof(diffBuf2_));
+    diffPos1_ = diffPos2_ = 0;
 }
 
 void FDNReverb::setDecay(float seconds) {
@@ -80,34 +85,50 @@ void FDNReverb::updateDecayCoefficients() {
 
 float FDNReverb::process(float input) {
     float l, r;
-    processStereo(input, l, r);
+    processStereo(input, input, l, r);
     return (l + r) * 0.5f;
 }
 
-void FDNReverb::processStereo(float input, float& left, float& right) {
+void FDNReverb::processStereo(float inL, float inR, float& outL, float& outR) {
     if (!enabled_) {
-        left = right = input;
+        outL = inL;
+        outR = inR;
         return;
     }
     
-    if (isnan(input) || isinf(input)) {
-        left = right = 0.0f;
-        return;
-    }
+    if (isnan(inL) || isinf(inL)) inL = 0.0f;
+    if (isnan(inR) || isinf(inR)) inR = 0.0f;
+
+    float monoInput = (inL + inR) * 0.5f;
+
+    // Input Diffusion
+    auto diffuse = [](float input, int16_t* buf, uint16_t& pos, int len, float coeff) {
+        int readPos = (int)pos - len;
+        if (readPos < 0) readPos += 256;
+        float delayed = buf[readPos] / 32000.0f;
+        float output = -coeff * input + delayed;
+        buf[pos] = (int16_t)(constrain(input + coeff * output, -1.0f, 1.0f) * 32000.0f);
+        pos = (pos + 1) % 256;
+        return output;
+    };
+
+    monoInput = diffuse(monoInput, diffBuf1_, diffPos1_, 113, 0.6f);
+    monoInput = diffuse(monoInput, diffBuf2_, diffPos2_, 199, 0.6f);
 
     // Pre-delay using safe index math
     int preReadPos = (int)preDelayPos_ - (int)preDelayTime_;
     if (preReadPos < 0) preReadPos += PREDELAY_MAX;
 
     int16_t preDelayed = preDelayBuffer_[preReadPos];
-    float clampedInput = input;
+    float clampedInput = monoInput;
     if (clampedInput > 1.0f) clampedInput = 1.0f;
     else if (clampedInput < -1.0f) clampedInput = -1.0f;
     preDelayBuffer_[preDelayPos_] = (int16_t)(clampedInput * 32000.0f);
     preDelayPos_++;
     if (preDelayPos_ >= PREDELAY_MAX) preDelayPos_ = 0;
     
-    float preDelayedF = preDelayed / 32000.0f;
+    float preDelayedF = frozen_ ? 0.0f : (preDelayed / 32000.0f);
+    float currentFeedback = frozen_ ? 0.999f : feedbackGain_;
     
     // Read from delay lines and apply damping - Unrolled
     float outputs[4];
@@ -147,22 +168,22 @@ void FDNReverb::processStereo(float input, float& left, float& right) {
     float ig = 0.25f;
     float tw;
 
-    tw = m0 * feedbackGain_ + preDelayedF * ig;
+    tw = m0 * currentFeedback + preDelayedF * ig;
     if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
     delayLines_[0][writePos_[0]] = (int16_t)(tw * 32000.0f);
     if (++writePos_[0] >= FDN_MAX_DELAY) writePos_[0] = 0;
 
-    tw = m1 * feedbackGain_ + preDelayedF * ig;
+    tw = m1 * currentFeedback + preDelayedF * ig;
     if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
     delayLines_[1][writePos_[1]] = (int16_t)(tw * 32000.0f);
     if (++writePos_[1] >= FDN_MAX_DELAY) writePos_[1] = 0;
 
-    tw = m2 * feedbackGain_ + preDelayedF * ig;
+    tw = m2 * currentFeedback + preDelayedF * ig;
     if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
     delayLines_[2][writePos_[2]] = (int16_t)(tw * 32000.0f);
     if (++writePos_[2] >= FDN_MAX_DELAY) writePos_[2] = 0;
 
-    tw = m3 * feedbackGain_ + preDelayedF * ig;
+    tw = m3 * currentFeedback + preDelayedF * ig;
     if (tw > 1.0f) tw = 1.0f; else if (tw < -1.0f) tw = -1.0f;
     delayLines_[3][writePos_[3]] = (int16_t)(tw * 32000.0f);
     if (++writePos_[3] >= FDN_MAX_DELAY) writePos_[3] = 0;
@@ -171,6 +192,6 @@ void FDNReverb::processStereo(float input, float& left, float& right) {
     float wetL = (outputs[0] + outputs[1]) * 0.5f;
     float wetR = (outputs[2] + outputs[3]) * 0.5f;
     
-    left = input * (1.0f - mix_) + wetL * mix_;
-    right = input * (1.0f - mix_) + wetR * mix_;
+    outL = inL * (1.0f - mix_) + wetL * mix_;
+    outR = inR * (1.0f - mix_) + wetR * mix_;
 }

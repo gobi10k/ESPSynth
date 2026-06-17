@@ -23,12 +23,14 @@ public:
     float getMix() const { return mix_; }
     
     float process(float input);
+    void processStereo(float& left, float& right);
     void clear();
 
 private:
-    int16_t buffer_[MAX_DELAY_SAMPLES];  // 16-bit saves 50% memory
+    int16_t bufferL_[MAX_DELAY_SAMPLES];  // 16-bit saves 50% memory
+    int16_t bufferR_[MAX_DELAY_SAMPLES];
     uint16_t writePos_;
-    uint16_t delaySamples_;
+    float delaySamples_;
     
     float delayTime_;
     float feedback_;
@@ -59,6 +61,7 @@ public:
     SaturationType getType() const { return type_; }
     
     float process(float input);
+    void processStereo(float& left, float& right);
 
 private:
     float drive_;
@@ -83,12 +86,15 @@ public:
     
     float getRate() const { return rate_; }
     float getDepth() const { return depth_; }
+    float getMix() const { return mix_; }
     
     float process(float input);
+    void processStereo(float& left, float& right);
     void clear();
 
 private:
-    int16_t buffer_[CHORUS_BUFFER_SIZE];  // 16-bit saves memory
+    int16_t bufferL_[CHORUS_BUFFER_SIZE];  // 16-bit saves memory
+    int16_t bufferR_[CHORUS_BUFFER_SIZE];
     uint16_t writePos_;
     
     float rate_;
@@ -114,6 +120,7 @@ public:
     void setEnabled(bool sat, bool chr, bool dly);
     
     float process(float input);
+    void processStereo(float& left, float& right);
 
     bool isSatEnabled() const { return satEnabled_; }
     bool isChorusEnabled() const { return chorusEnabled_; }

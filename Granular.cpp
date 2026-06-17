@@ -125,6 +125,7 @@ float GranularExciter::process() {
     
     // Sum all active grains - massively optimized per-sample path
     float output = 0.0f;
+    int activeCount = 0;
     for (int i = 0; i < MAX_GRAINS; i++) {
         Grain& g = grains_[i];
         if (!g.active) continue;
@@ -176,6 +177,7 @@ float GranularExciter::process() {
         }
 
         output += sample * window * g.amplitude;
+        activeCount++;
 
         // 3. Advance Grain
         g.phase += g.phaseIncrement;
@@ -185,6 +187,10 @@ float GranularExciter::process() {
         }
     }
     
+    if (activeCount > 1) {
+        output /= sqrtf((float)activeCount);
+    }
+
     return output;
 }
 

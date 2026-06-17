@@ -38,16 +38,21 @@ public:
     void updateCoefficients(float modHz);
     
     inline float process(float input) {
-        // State variable filter iteration (2x unrolled for performance and stability)
+        // True 2x oversampling with linear interpolation
+        float halfInput = (lastInput_ + input) * 0.5f;
+
+        // First iteration (half-sample)
         low_ += fMod_ * band_;
-        high_ = input - low_ - q_ * band_;
+        high_ = halfInput - low_ - q_ * band_;
         band_ += fMod_ * high_;
 
+        // Second iteration (full-sample)
         low_ += fMod_ * band_;
         high_ = input - low_ - q_ * band_;
         band_ += fMod_ * high_;
 
         notch_ = high_ + low_;
+        lastInput_ = input;
 
         return *activeOutput_;
     }
@@ -79,6 +84,7 @@ private:
     float band_;
     float notch_;
     float* activeOutput_;
+    float lastInput_;
 };
 
 #endif

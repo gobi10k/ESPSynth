@@ -21,6 +21,27 @@ void MIDIHandler::setChannel(uint8_t channel) {
     channel_ = channel;  // 0 = omni, 1-16 = specific
 }
 
+void MIDIHandler::sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel) {
+    uint8_t status = 0x90 | ((channel - 1) & 0x0F);
+    MIDISerial.write(status);
+    MIDISerial.write(note & 0x7F);
+    MIDISerial.write(velocity & 0x7F);
+}
+
+void MIDIHandler::sendNoteOff(uint8_t note, uint8_t channel) {
+    uint8_t status = 0x80 | ((channel - 1) & 0x0F);
+    MIDISerial.write(status);
+    MIDISerial.write(note & 0x7F);
+    MIDISerial.write(0x00);
+}
+
+void MIDIHandler::sendCC(uint8_t cc, uint8_t value, uint8_t channel) {
+    uint8_t status = 0xB0 | ((channel - 1) & 0x0F);
+    MIDISerial.write(status);
+    MIDISerial.write(cc & 0x7F);
+    MIDISerial.write(value & 0x7F);
+}
+
 void MIDIHandler::process() {
     while (MIDISerial.available()) {
         uint8_t byte = MIDISerial.read();
@@ -42,11 +63,20 @@ void MIDIHandler::process() {
         
         // Status byte?
         if (byte & 0x80) {
-            runningStatus_ = byte;
-            dataIndex_ = 0;
+            if (byte < 0xF8) {
+                runningStatus_ = byte;
+                dataIndex_ = 0;
+            }
             
             // Determine expected data length
             uint8_t type = byte & 0xF0;
+            if (byte >= 0xF0 && byte < 0xF8) {
+                runningStatus_ = 0; // Clear running status for system common
+                expectedLength_ = 0;
+                // Handle specific system common if needed
+                continue;
+            }
+
             switch (type) {
                 case 0x80:  // Note Off
                 case 0x90:  // Note On

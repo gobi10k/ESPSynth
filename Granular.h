@@ -74,7 +74,12 @@ public:
     
     float getDensity() const { return density_; }
     float getDuration() const { return durationMs_; }
+    float getDurationSpread() const { return durationSpread_; }
+    float getPitchSpread() const { return pitchSpread_; }
+    float getAmplitude() const { return amplitude_; }
     GrainSource getSource() const { return source_; }
+    GrainWindow getWindow() const { return window_; }
+    bool isFreeRunning() const { return freeRunning_; }
     
     // Process - returns sum of all active grains
     float process();

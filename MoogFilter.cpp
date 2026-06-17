@@ -54,27 +54,27 @@ float MoogFilter::process(float input) {
     input *= drive_;
     
     // Feedback with saturation
-    input -= fastTanh(delay_[3] * feedback);
+    input -= fastPolyClip(delay_[3] * feedback);
     
     // Four cascaded one-pole lowpass filters - unrolled
-    float in = fastTanh(input);
+    float in = fastPolyClip(input);
     stage_[0] = gMod_ * in + invGMod_ * delay_[0];
     delay_[0] = stage_[0];
     
-    in = fastTanh(stage_[0]);
+    in = fastPolyClip(stage_[0]);
     stage_[1] = gMod_ * in + invGMod_ * delay_[1];
     delay_[1] = stage_[1];
     
-    in = fastTanh(stage_[1]);
+    in = fastPolyClip(stage_[1]);
     stage_[2] = gMod_ * in + invGMod_ * delay_[2];
     delay_[2] = stage_[2];
 
-    in = fastTanh(stage_[2]);
+    in = fastPolyClip(stage_[2]);
     stage_[3] = gMod_ * in + invGMod_ * delay_[3];
     delay_[3] = stage_[3];
 
     float output = stage_[3] * (1.0f + feedback * 0.3f);
-    output = fastTanh(output);
+    output = fastPolyClip(output);
 
     if (isnan(output) || isinf(output)) {
         reset();
@@ -194,44 +194,37 @@ float LadderFilter::process(float input) {
     float feedback = resonance_ * 3.5f;
     float in = input * drive_;
     
-    if (in > 2.0f) in = 2.0f;
-    else if (in < -2.0f) in = -2.0f;
+    in = fastPolyClip(in * 0.5f) * 2.0f;
     
     float fb = delay_[3] * feedback;
-    if (fb > 1.0f) fb = 1.0f;
-    else if (fb < -1.0f) fb = -1.0f;
+    fb = fastPolyClip(fb);
     in -= fb;
     
     // Four stages - unrolled
     float stageIn = in;
-    if (stageIn > 1.5f) stageIn = 1.5f;
-    else if (stageIn < -1.5f) stageIn = -1.5f;
+    stageIn = fastPolyClip(stageIn);
     stage_[0] = gMod_ * stageIn + invGMod_ * delay_[0];
     delay_[0] = stage_[0];
 
     stageIn = stage_[0];
-    if (stageIn > 1.5f) stageIn = 1.5f;
-    else if (stageIn < -1.5f) stageIn = -1.5f;
+    stageIn = fastPolyClip(stageIn);
     stage_[1] = gMod_ * stageIn + invGMod_ * delay_[1];
     delay_[1] = stage_[1];
 
     stageIn = stage_[1];
-    if (stageIn > 1.5f) stageIn = 1.5f;
-    else if (stageIn < -1.5f) stageIn = -1.5f;
+    stageIn = fastPolyClip(stageIn);
     stage_[2] = gMod_ * stageIn + invGMod_ * delay_[2];
     delay_[2] = stage_[2];
 
     stageIn = stage_[2];
-    if (stageIn > 1.5f) stageIn = 1.5f;
-    else if (stageIn < -1.5f) stageIn = -1.5f;
+    stageIn = fastPolyClip(stageIn);
     stage_[3] = gMod_ * stageIn + invGMod_ * delay_[3];
     delay_[3] = stage_[3];
 
     float output = taps_[0] * in + taps_[1] * stage_[0] + taps_[2] * stage_[1] + taps_[3] * stage_[2] + taps_[4] * stage_[3];
     output *= (1.0f + feedback * 0.15f);
     
-    if (output > 1.0f) output = 1.0f;
-    else if (output < -1.0f) output = -1.0f;
+    output = fastPolyClip(output);
     
     if (isnan(output) || isinf(output)) {
         reset();

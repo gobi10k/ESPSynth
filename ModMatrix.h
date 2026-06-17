@@ -38,6 +38,8 @@ enum class ModDest : uint8_t {
     DELAY_TIME,
     DELAY_FEEDBACK,
     CHORUS_DEPTH,
+    OSC1_PW,
+    OSC2_PW,
     NUM_DESTINATIONS
 };
 

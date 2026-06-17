@@ -36,34 +36,40 @@ public:
                 currentValue_ = 0.0f;
                 break;
 
-            case EnvelopeStage::ATTACK:
-                currentValue_ += attackCoef_ * (targetValue_ - currentValue_);
-                if (currentValue_ >= 0.99f) {
+            case EnvelopeStage::ATTACK: {
+                float overshootTarget = 1.02f;
+                currentValue_ += attackCoef_ * (overshootTarget - currentValue_);
+                if (currentValue_ >= 1.0f) {
                     currentValue_ = 1.0f;
                     stage_ = EnvelopeStage::DECAY;
                     targetValue_ = sustainLevel_;
                 }
                 break;
+            }
 
-            case EnvelopeStage::DECAY:
-                currentValue_ += decayCoef_ * (targetValue_ - currentValue_);
-                if (currentValue_ <= sustainLevel_ + 0.001f) {
+            case EnvelopeStage::DECAY: {
+                float overshootTarget = sustainLevel_ * 0.95f - 0.01f;
+                currentValue_ += decayCoef_ * (overshootTarget - currentValue_);
+                if (currentValue_ <= sustainLevel_) {
                     currentValue_ = sustainLevel_;
                     stage_ = EnvelopeStage::SUSTAIN;
                 }
                 break;
+            }
 
             case EnvelopeStage::SUSTAIN:
                 currentValue_ = sustainLevel_;
                 break;
 
-            case EnvelopeStage::RELEASE:
-                currentValue_ += releaseCoef_ * (targetValue_ - currentValue_);
-                if (currentValue_ <= 0.001f) {
+            case EnvelopeStage::RELEASE: {
+                float overshootTarget = -0.02f;
+                currentValue_ += releaseCoef_ * (overshootTarget - currentValue_);
+                if (currentValue_ <= 0.0f) {
                     currentValue_ = 0.0f;
                     stage_ = EnvelopeStage::IDLE;
                 }
                 break;
+            }
         }
         return currentValue_;
     }

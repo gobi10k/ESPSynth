@@ -2,6 +2,7 @@
 #define RESONATOR_H
 
 #include "Config.h"
+#include <atomic>
 
 /**
  * Modal Resonator Bank
@@ -52,7 +53,11 @@ public:
     
     float getFrequency() const { return fundamental_; }
     ResonatorProfile getProfile() const { return profile_; }
-    
+    float getResonance() const { return resonance_; }
+    float getDamping() const { return damping_; }
+    float getBrightness() const { return brightness_; }
+    float getMix() const { return mix_; }
+
     // Process audio
     float process(float input);
     
@@ -93,7 +98,7 @@ private:
     // Shadow coefficients for atomic updates
     float nb0_[MAX_RESONATORS], nb1_[MAX_RESONATORS], nb2_[MAX_RESONATORS];
     float na1_[MAX_RESONATORS], na2_[MAX_RESONATORS];
-    volatile bool dirty_;
+    std::atomic<bool> dirty_;
 
     // Biquad state per resonator
     float x1_[MAX_RESONATORS], x2_[MAX_RESONATORS];

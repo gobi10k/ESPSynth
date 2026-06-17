@@ -67,6 +67,11 @@ public:
     void begin(uint8_t rxPin = 16, uint8_t txPin = 17);
     void process();  // Call in loop
     
+    // MIDI output
+    void sendNoteOn(uint8_t note, uint8_t velocity, uint8_t channel = 1);
+    void sendNoteOff(uint8_t note, uint8_t channel = 1);
+    void sendCC(uint8_t cc, uint8_t value, uint8_t channel = 1);
+
     void setChannel(uint8_t channel);  // 0 = omni
     uint8_t getChannel() const { return channel_; }
     

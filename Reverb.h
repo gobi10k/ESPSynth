@@ -27,12 +27,17 @@ public:
     void setPreDelay(float ms);
     
     float getDecay() const { return decayTime_; }
+    float getSize() const { return roomSize_; }
+    float getDamping() const { return damping_; }
     float getMix() const { return mix_; }
+    float getPreDelay() const { return (float)preDelayTime_ * 1000.0f / SAMPLE_RATE; }
     bool isEnabled() const { return enabled_; }
     void setEnabled(bool en) { enabled_ = en; }
+    void setFreeze(bool frozen) { frozen_ = frozen; }
+    bool isFrozen() const { return frozen_; }
     
     float process(float input);
-    void processStereo(float input, float& left, float& right);
+    void processStereo(float inL, float inR, float& outL, float& outR);
     void reset();
 
 private:
@@ -58,7 +63,13 @@ private:
     float damping_;
     float mix_;
     
+    // Diffusion
+    int16_t diffBuf1_[256];
+    int16_t diffBuf2_[256];
+    uint16_t diffPos1_, diffPos2_;
+
     bool enabled_;
+    bool frozen_;
 };
 
 #endif
