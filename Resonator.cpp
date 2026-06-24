@@ -170,6 +170,12 @@ float ResonatorBank::process(float input) {
     
     // Normalize and filter
     resonated *= 0.4f;
+
+    if (isnan(resonated) || isinf(resonated)) {
+        reset();
+        resonated = 0.0f;
+    }
+
     brightnessState_ += brightnessCoef_ * (resonated - brightnessState_);
     
     return input + mix_ * (brightnessState_ - input);

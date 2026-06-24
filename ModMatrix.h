@@ -19,6 +19,7 @@ enum class ModSource : uint8_t {
 };
 
 extern const char* MOD_SOURCE_NAMES[];
+extern const char* MOD_DEST_NAMES[];
 
 // ============================================================================
 // MODULATION DESTINATIONS
@@ -41,9 +42,6 @@ enum class ModDest : uint8_t {
     NUM_DESTINATIONS
 };
 
-extern const char* MOD_DEST_NAMES[];
-
-// ============================================================================
 // MODULATION SLOT
 // ============================================================================
 

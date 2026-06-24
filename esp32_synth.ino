@@ -87,6 +87,7 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
             break;
         case MIDI_CC::SUSTAIN_LEVEL:
             synth.setAmpADSR(-1, -1, val / 127.0f, -1);
+            synth.setFilterADSR(-1, -1, val / 127.0f, -1);
             break;
         case MIDI_CC::RELEASE:
             synth.setAmpADSR(-1, -1, -1, val * 0.02f);
@@ -97,6 +98,19 @@ void onMIDICC(uint8_t ch, uint8_t cc, uint8_t val) {
             break;
         case MIDI_CC::FILTER_ENV_VEL:
             synth.setFilterEnvVelocity(val / 127.0f);
+            break;
+        case MIDI_CC::UNISON_VOICES:
+            synth.setUnisonVoices(1 + (val * 3 / 127)); // 1-4
+            break;
+        case MIDI_CC::UNISON_DETUNE:
+            synth.setUnisonDetune(val * 100.0f / 127.0f);
+            break;
+        case MIDI_CC::WAVE_MORPH:
+            for(int i=0; i<NUM_VOICES; i++) {
+                float m = val / 127.0f;
+                synth.getVoice(i).getOsc(0).setMorph(m);
+                synth.getVoice(i).getOsc(1).setMorph(m);
+            }
             break;
         case MIDI_CC::REVERB_SEND:
             synth.getReverb().setMix(val / 127.0f);
@@ -160,6 +174,10 @@ void applyPreset(const PresetData& p) {
     synth.setOscDetune(0, p.osc1Detune);
     synth.setOscDetune(1, p.osc2Detune);
     synth.setOscMix(p.oscMix / 100.0f);
+    for (int i = 0; i < NUM_VOICES; i++) {
+        synth.getVoice(i).getOsc(0).setPulseWidth(p.osc1PW / 100.0f);
+        synth.getVoice(i).getOsc(1).setPulseWidth(p.osc2PW / 100.0f);
+    }
     
     synth.setFilterCutoff(p.filterCutoff);
     synth.setFilterResonance(p.filterReso / 100.0f);
@@ -206,6 +224,32 @@ void applyPreset(const PresetData& p) {
     synth.setMasterVolume(p.masterVolume / 100.0f);
     synth.setGlobalPan(p.globalPan / 100.0f);
     
+    synth.setUnisonVoices(p.unisonVoices > 0 ? p.unisonVoices : 1);
+    synth.setUnisonDetune(p.unisonDetune);
+    float morph = p.waveMorph / 100.0f;
+    for(int i=0; i<NUM_VOICES; i++) {
+        synth.getVoice(i).getOsc(0).setMorph(morph);
+        synth.getVoice(i).getOsc(1).setMorph(morph);
+    }
+
+    // Mod Matrix
+    synth.getModMatrix().clearAll();
+    for (int i = 0; i < 8; i++) {
+        ModSource src = (ModSource)(p.modSrcDest[i] >> 4);
+        ModDest dest = (ModDest)(p.modSrcDest[i] & 0x0F);
+        if (src != ModSource::NONE && dest != ModDest::NONE) {
+            synth.getModMatrix().setSlot(i, src, dest, p.modAmount[i] / 1000.0f);
+        }
+    }
+
+    // SD Waves
+    if (sd.isAvailable()) {
+        const char* waveA = synth.getWavetableManager().getWaveFileName(p.waveSlotA);
+        if (waveA) synth.loadWavetableForOsc(0, 0, waveA);
+        const char* waveB = synth.getWavetableManager().getWaveFileName(p.waveSlotB);
+        if (waveB) synth.loadWavetableForOsc(0, 1, waveB);
+    }
+
     Serial.printf("Loaded: %s\n", p.name);
 }
 
@@ -229,6 +273,26 @@ PresetData createPresetFromCurrent(const char* name) {
     p.filterKeyTrack = (uint8_t)(synth.getFilterKeyTracking() * 100.0f);
     p.globalPan = (int8_t)(synth.getGlobalPan() * 100.0f);
     
+    p.unisonVoices = synth.getUnisonVoices();
+    p.unisonDetune = (uint8_t)synth.getUnisonDetune();
+    p.waveMorph = (uint8_t)(synth.getVoice(0).getOsc(0).getMorph() * 100.0f);
+
+    p.osc1PW = (uint8_t)(synth.getVoice(0).getOsc(0).getPulseWidth() * 100.0f);
+    p.osc2PW = (uint8_t)(synth.getVoice(0).getOsc(1).getPulseWidth() * 100.0f);
+
+    // Mod Matrix
+    for (int i = 0; i < 8; i++) {
+        ModSlot& slot = synth.getModMatrix().getSlot(i);
+        p.modSrcDest[i] = (static_cast<uint8_t>(slot.source) << 4) | static_cast<uint8_t>(slot.destination);
+        p.modAmount[i] = (int16_t)(slot.amount * 1000.0f);
+    }
+
+    // SD Waves (This is tricky because we only have indices in DisplayManager state)
+    // For now we'll assume the current selection in UI is what's being saved,
+    // but better would be to track what's actually LOADED in the voices.
+    p.waveSlotA = synth.getLoadedWaveIndex(0);
+    p.waveSlotB = synth.getLoadedWaveIndex(1);
+
     p.effectFlags = (satEnabled ? 1 : 0) | (chorusEnabled ? 2 : 0) | (delayEnabled ? 4 : 0);
     
     return p;
@@ -288,6 +352,11 @@ void setup() {
     if (!synth.init()) {
         Serial.println("FATAL: Synth init failed");
         while (1) delay(1000);
+    }
+
+    // Initialize wavetable manager after SD and synth are ready
+    if (sd.isAvailable()) {
+        synth.getWavetableManager().init(&sd);
     }
 
     // Setup controls
@@ -415,6 +484,9 @@ void printHelp() {
     Serial.println("  P<0-15>    Load internal preset");
     Serial.println("  PS<0-15>   Save to internal slot");
     Serial.println("  PF         Load factory presets");
+    Serial.println("");
+    Serial.println("-- Navigation --");
+    Serial.println("  Pages: MAIN -> OSC -> FILTER -> ENVELOPES -> LFO -> MOD -> ARP -> EFFECTS -> MIXER -> SD");
     Serial.println("");
     Serial.println("-- Other --");
     Serial.println("  gl<ms>     Glide time");
@@ -987,10 +1059,35 @@ void loop() {
     }
 
     if (encVal.wasClicked()) {
-        // Encoder 2 click could trigger something like "preview note"
-        synth.noteOn(60, 100);
-        delay(100);
-        synth.noteOff(60);
+        if (display.getCurrentPage() == DisplayPage::SD_BROWSER) {
+            display.setLoading(true);
+            display.update(); // Force refresh to show LOADING
+
+            if (display.isWaveMode()) {
+                const char* name = synth.getWavetableManager().getWaveFileName(display.getSDFileIndex());
+                if (name) {
+                    synth.loadWavetableForOsc(0, display.getSDSlot(), name);
+                    Serial.printf("UI: Loaded Wave %s into slot %d\n", name, display.getSDSlot());
+                    delay(200); // Small delay to let user see "LOADING"
+                }
+            } else {
+                int slot = display.getSDFileIndex();
+                PresetData p;
+                char filename[32];
+                snprintf(filename, sizeof(filename), "preset_%d", slot);
+                if (presets.loadPresetFromSD(filename, p, sd)) {
+                    applyPreset(p);
+                    Serial.printf("UI: Loaded Preset %s\n", filename);
+                    delay(200);
+                }
+            }
+            display.setLoading(false);
+        } else {
+            // Preview note
+            synth.noteOn(60, 100);
+            delay(100);
+            synth.noteOff(60);
+        }
     }
 
     // Heartbeat and auto-stats from loop() to avoid Serial deadlocks in audio task

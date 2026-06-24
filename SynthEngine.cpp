@@ -26,6 +26,8 @@ SynthEngine::SynthEngine() :
     granularEnabled_(false),
     globalPan_(0.0f),
     currentVelocity_(0.0f),
+    unisonVoices_(1),
+    unisonDetune_(10.0f),
     running_(false),
     audioTaskHandle_(nullptr)
 {
@@ -50,6 +52,9 @@ SynthEngine::SynthEngine() :
     
     // Default mod routing - LFO1 to filter cutoff with significant amount
     modMatrix_.setSlot(0, ModSource::LFO1, ModDest::FILTER_CUTOFF, 0.5f);
+
+    for (int i = 0; i < NUM_VOICES; i++) voiceNotes_[i] = 255;
+    currentWaveIdx_[0] = currentWaveIdx_[1] = 255;
 }
 
 bool SynthEngine::init() {
@@ -177,35 +182,52 @@ void SynthEngine::noteOn(uint8_t note, uint8_t velocity) {
         return;
     }
     
-    int voice = allocateVoice(note);
-    if (voice < 0) return; // Should not happen with stealing
-    
-    // Configure voice (minimal settings)
-    voices_[voice].setOscWaveform(0, oscWaveforms_[0]);
-    voices_[voice].setOscWaveform(1, oscWaveforms_[1]);
-    voices_[voice].setOscMix(oscMix_);
-    voices_[voice].setSynthMode(synthMode_);
-    voices_[voice].setFMAmount(fmAmount_);
-    voices_[voice].setFilterType(filterType_);
-    voices_[voice].setFilterCutoff(filterCutoff_);
-    voices_[voice].setFilterResonance(filterReso_);
-    voices_[voice].setFilterMode(filterMode_);
-    voices_[voice].setFilterEnvAmount(filterEnvAmount_);
-    voices_[voice].setFilterEnvVelocity(filterEnvVelocity_);
-    voices_[voice].setFilterKeyTracking(filterKeyTracking_);
-    voices_[voice].setAmpADSR(ampA_, ampD_, ampS_, ampR_);
-    voices_[voice].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
+    // For Unison, we allocate multiple voices
+    int voicesToAllocate = unisonVoices_;
+    if (voicesToAllocate > NUM_VOICES) voicesToAllocate = NUM_VOICES;
 
-    // Combine spread and global pan
-    float spread = -0.7f + (1.4f * voice / (NUM_VOICES - 1));
-    voices_[voice].setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
+    for (int v = 0; v < voicesToAllocate; v++) {
+        int voiceIdx = allocateVoice(note);
+        if (voiceIdx < 0) break;
+
+        Voice& voice = voices_[voiceIdx];
+        voiceNotes_[voiceIdx] = note;
+
+        // Configure voice
+        voice.setOscWaveform(0, oscWaveforms_[0]);
+        voice.setOscWaveform(1, oscWaveforms_[1]);
+        voice.setOscMix(oscMix_);
+        voice.setSynthMode(synthMode_);
+        voice.setFMAmount(fmAmount_);
+        voice.setFilterType(filterType_);
+        voice.setFilterCutoff(filterCutoff_);
+        voice.setFilterResonance(filterReso_);
+        voice.setFilterMode(filterMode_);
+        voice.setFilterEnvAmount(filterEnvAmount_);
+        voice.setFilterEnvVelocity(filterEnvVelocity_);
+        voice.setFilterKeyTracking(filterKeyTracking_);
+        voice.setAmpADSR(ampA_, ampD_, ampS_, ampR_);
+        voice.setFilterADSR(fltA_, fltD_, fltS_, fltR_);
+        voice.setGlideTime(glideTime_);
+
+        // Unison Detune
+        float detune = 0.0f;
+        if (voicesToAllocate > 1) {
+            detune = unisonDetune_ * ((float)v / (voicesToAllocate - 1) - 0.5f) * 2.0f;
+        }
+        voice.setVoicePitchOffset(detune / 100.0f); // Use per-voice offset for unison detune
+
+        // Panning spread
+        float spread = -0.8f + (1.6f * v / (max(1, voicesToAllocate - 1)));
+        voice.setPan(constrain(spread + globalPan_, -1.0f, 1.0f));
+
+        voice.noteOn(note, velocity);
+    }
 
     // Melodic tracking for resonator
     if (resonatorEnabled_) {
         resonator_.setFrequency(midiToFreq(note));
     }
-
-    voices_[voice].noteOn(note, velocity);
 }
 
 void SynthEngine::noteOff(uint8_t note) {
@@ -214,11 +236,11 @@ void SynthEngine::noteOff(uint8_t note) {
         return;
     }
     
-    // Find voice playing this note
+    // Find all voices playing this note (for unison)
     for (int i = 0; i < NUM_VOICES; i++) {
-        if (voices_[i].isActive() && voices_[i].getNote() == note) {
+        if (voices_[i].isActive() && voiceNotes_[i] == note) {
             voices_[i].noteOff();
-            break;
+            voiceNotes_[i] = 255;
         }
     }
 }
@@ -227,6 +249,7 @@ void SynthEngine::allNotesOff() {
     arp_.allNotesOff();
     for (int i = 0; i < NUM_VOICES; i++) {
         voices_[i].forceOff();
+        voiceNotes_[i] = 255;
     }
 }
 
@@ -245,6 +268,24 @@ void SynthEngine::setOscWaveform(int osc, Waveform wf) {
         oscWaveforms_[osc] = wf;
         for (int i = 0; i < NUM_VOICES; i++) {
             voices_[i].setOscWaveform(osc, wf);
+        }
+    }
+}
+
+void SynthEngine::loadWavetableForOsc(int osc, int slot, const char* filename) {
+    if (osc < 0 || osc >= 2) return;
+    uint16_t size;
+    float* table = wtManager_.getWavetable(filename, size);
+    if (table) {
+        for (int i = 0; i < NUM_VOICES; i++) {
+            voices_[i].setOscCustomTable(osc, slot, table, size);
+        }
+        // Save index for preset saving
+        for (int i = 0; i < wtManager_.getWaveFileCount(); i++) {
+            if (strcmp(wtManager_.getWaveFileName(i), filename) == 0) {
+                currentWaveIdx_[slot] = i;
+                break;
+            }
         }
     }
 }
@@ -353,6 +394,14 @@ void SynthEngine::setFilterADSR(float a, float d, float s, float r) {
     for (int i = 0; i < NUM_VOICES; i++) {
         voices_[i].setFilterADSR(fltA_, fltD_, fltS_, fltR_);
     }
+}
+
+void SynthEngine::setUnisonVoices(uint8_t count) {
+    unisonVoices_ = constrain(count, 1, NUM_VOICES);
+}
+
+void SynthEngine::setUnisonDetune(float cents) {
+    unisonDetune_ = constrain(cents, 0.0f, 100.0f);
 }
 
 void SynthEngine::setGlideTime(float ms) {

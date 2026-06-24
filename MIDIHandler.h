@@ -48,6 +48,9 @@ namespace MIDI_CC {
     constexpr uint8_t FILTER_TYPE = 22;
     constexpr uint8_t FILTER_KEY_TRACK = 23;
     constexpr uint8_t FILTER_ENV_VEL = 24;
+    constexpr uint8_t UNISON_VOICES = 25;
+    constexpr uint8_t UNISON_DETUNE = 26;
+    constexpr uint8_t WAVE_MORPH = 27;
 
     constexpr uint8_t ALL_NOTES_OFF = 123;
 }

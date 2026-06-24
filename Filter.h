@@ -2,6 +2,7 @@
 #define FILTER_H
 
 #include "Config.h"
+#include "MathUtils.h"
 
 enum class FilterMode : uint8_t {
     LOWPASS = 0,
@@ -49,7 +50,13 @@ public:
 
         notch_ = high_ + low_;
 
-        return *activeOutput_;
+        float output = *activeOutput_;
+        if (isnan(output) || isinf(output)) {
+            reset();
+            return 0.0f;
+        }
+
+        return output;
     }
     
     // Access individual outputs

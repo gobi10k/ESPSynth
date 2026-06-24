@@ -13,6 +13,8 @@ enum class LFOWaveform : uint8_t {
     NUM_WAVEFORMS
 };
 
+extern const char* LFO_WAVEFORM_NAMES[];
+
 class LFO {
 public:
     LFO();

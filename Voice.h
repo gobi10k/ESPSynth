@@ -48,6 +48,7 @@ public:
     uint8_t getNote() const { return note_; }
     uint32_t getAge() const { return age_; }
     float getLevel() const { return ampEnv_.getValue(); }
+    Oscillator& getOsc(int i) { return osc_[i]; }
     float getFilterEnvValue() const { return filterEnv_.getValue(); }
     float getFrequency() const { return targetFreq_; }
     
@@ -58,6 +59,7 @@ public:
     // Oscillators
     void setOscWaveform(int osc, Waveform wf);
     void setOscDetune(int osc, float cents);
+    void setOscCustomTable(int osc, int slot, float* table, uint16_t size);
     void setOscMix(float mix);
     
     // Synth mode
@@ -80,6 +82,7 @@ public:
     // Modulation
     void setGlobalFilterMod(float mod) { globalFilterMod_ = mod; }
     void setGlobalPitchMod(float mod) { globalPitchMod_ = mod; }
+    void setVoicePitchOffset(float semitones) { voicePitchOffset_ = semitones; }
     void updateBlockParams();
 
     // Glide
@@ -114,6 +117,7 @@ private:
     // Modulation
     float globalFilterMod_;
     float globalPitchMod_;
+    float voicePitchOffset_;
 
     // Envelopes
     Envelope ampEnv_;

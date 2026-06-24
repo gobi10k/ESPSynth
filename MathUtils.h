@@ -2,6 +2,7 @@
 #define MATH_UTILS_H
 
 #include <Arduino.h>
+#include <math.h>
 
 #define TWO_PI 6.28318530717958647693f
 #define TWO_PI_INV_SR -0.00013089969f // -2 * PI / 48000
@@ -68,5 +69,13 @@ inline float fastRandFloat01(uint32_t& state) {
     // Range: 0.0 to 1.0
     return (float)(fastRand(state) & 0x7FFFFFFF) * 4.6566129e-10f;
 }
+
+/**
+ * Robust numeric stability guard
+ */
+#define SAFE_CHECK(v, fallback) \
+    if (isnan(v) || isinf(v)) { \
+        v = fallback; \
+    }
 
 #endif

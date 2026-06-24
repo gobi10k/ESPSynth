@@ -12,7 +12,12 @@ DisplayManager::DisplayManager() :
     refreshDelayMs_(50),
     running_(false),
     currentPage_(DisplayPage::MAIN),
-    selectedItem_(0)
+    selectedItem_(0),
+    modSlotIndex_(0),
+    sdFileIndex_(0),
+    sdSlot_(0),
+    sdWaveMode_(false),
+    loadingFlag_(false)
 {
 }
 
@@ -91,6 +96,13 @@ void DisplayManager::nextItem() {
     int maxItems = 4;
     if (currentPage_ == DisplayPage::MAIN) maxItems = 0;
     else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
+    else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
+    else if (currentPage_ == DisplayPage::ENVELOPES) maxItems = 8;
+    else if (currentPage_ == DisplayPage::LFO) maxItems = 8;
+    else if (currentPage_ == DisplayPage::MOD_MATRIX) maxItems = 4;
+    else if (currentPage_ == DisplayPage::ARP) maxItems = 5;
+    else if (currentPage_ == DisplayPage::MIXER) maxItems = 5;
+    else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 3;
 
     if (selectedItem_ >= maxItems) selectedItem_ = 0;
 }
@@ -100,6 +112,13 @@ void DisplayManager::prevItem() {
     int maxItems = 4;
     if (currentPage_ == DisplayPage::MAIN) maxItems = 0;
     else if (currentPage_ == DisplayPage::FILTER) maxItems = 6;
+    else if (currentPage_ == DisplayPage::OSCILLATORS) maxItems = 6;
+    else if (currentPage_ == DisplayPage::ENVELOPES) maxItems = 8;
+    else if (currentPage_ == DisplayPage::LFO) maxItems = 8;
+    else if (currentPage_ == DisplayPage::MOD_MATRIX) maxItems = 4;
+    else if (currentPage_ == DisplayPage::ARP) maxItems = 5;
+    else if (currentPage_ == DisplayPage::MIXER) maxItems = 5;
+    else if (currentPage_ == DisplayPage::SD_BROWSER) maxItems = 3;
 
     if (selectedItem_ < 0) selectedItem_ = maxItems - 1;
     if (selectedItem_ < 0) selectedItem_ = 0;
@@ -113,18 +132,110 @@ void DisplayManager::adjustValue(int delta) {
             switch (selectedItem_) {
                 case 0: {
                     int wf = (int)engine_->getOscWaveform(0) + delta;
-                    while (wf < 0) wf += 7;
-                    engine_->setOscWaveform(0, (Waveform)(wf % 7));
+                    while (wf < 0) wf += (int)Waveform::NUM_WAVEFORMS;
+                    engine_->setOscWaveform(0, (Waveform)(wf % (int)Waveform::NUM_WAVEFORMS));
                     break;
                 }
                 case 1: {
                     int wf = (int)engine_->getOscWaveform(1) + delta;
-                    while (wf < 0) wf += 7;
-                    engine_->setOscWaveform(1, (Waveform)(wf % 7));
+                    while (wf < 0) wf += (int)Waveform::NUM_WAVEFORMS;
+                    engine_->setOscWaveform(1, (Waveform)(wf % (int)Waveform::NUM_WAVEFORMS));
                     break;
                 }
                 case 2: engine_->setOscMix(constrain(engine_->getOscMix() + delta * 0.05f, 0.0f, 1.0f)); break;
                 case 3: engine_->setOscDetune(1, constrain(engine_->getOscDetune(1) + delta * 0.5f, -50.0f, 50.0f)); break;
+                case 4: engine_->setUnisonVoices(constrain(engine_->getUnisonVoices() + delta, 1, NUM_VOICES)); break;
+                case 5: {
+                    for(int i=0; i<NUM_VOICES; i++) {
+                        float m = constrain(engine_->getVoice(i).getOsc(0).getMorph() + delta * 0.05f, 0.0f, 1.0f);
+                        engine_->getVoice(i).getOsc(0).setMorph(m);
+                        engine_->getVoice(i).getOsc(1).setMorph(m);
+                    }
+                    break;
+                }
+            }
+            break;
+
+        case DisplayPage::MIXER:
+            switch (selectedItem_) {
+                case 0: engine_->setMasterVolume(constrain(engine_->getMasterVolume() + delta * 0.05f, 0.0f, 1.0f)); break;
+                case 1: engine_->setGlobalPan(constrain(engine_->getGlobalPan() + delta * 0.1f, -1.0f, 1.0f)); break;
+                case 2: engine_->getReverb().setMix(constrain(engine_->getReverb().getMix() + delta * 0.05f, 0.0f, 1.0f)); break;
+                case 3: engine_->getEffects().delay.setMix(constrain(engine_->getEffects().delay.getMix() + delta * 0.05f, 0.0f, 1.0f)); break;
+                case 4: engine_->getEffects().chorus.setMix(constrain(engine_->getEffects().chorus.getMix() + delta * 0.05f, 0.0f, 1.0f)); break;
+            }
+            break;
+
+        case DisplayPage::LFO: {
+            int lfoIdx = selectedItem_ / 4;
+            int param = selectedItem_ % 4;
+            LFO& lfo = engine_->getLFO(lfoIdx);
+            switch (param) {
+                case 0: {
+                    int wf = static_cast<int>(lfo.getWaveform()) + delta;
+                    while (wf < 0) wf += static_cast<int>(LFOWaveform::NUM_WAVEFORMS);
+                    lfo.setWaveform(static_cast<LFOWaveform>(wf % static_cast<int>(LFOWaveform::NUM_WAVEFORMS)));
+                    break;
+                }
+                case 1: lfo.setFrequency(constrain(lfo.getFrequency() + delta * 0.1f, 0.01f, 50.0f)); break;
+                case 2: lfo.setDepth(constrain(lfo.getDepth() + delta * 0.05f, 0.0f, 1.0f)); break;
+                case 3: /* could be phase or sync */ break;
+            }
+            break;
+        }
+
+        case DisplayPage::ARP: {
+            Arpeggiator& arp = engine_->getArp();
+            switch (selectedItem_) {
+                case 0: {
+                    int mode = static_cast<int>(arp.getMode()) + delta;
+                    while (mode < 0) mode += static_cast<int>(ArpMode::NUM_MODES);
+                    arp.setMode(static_cast<ArpMode>(mode % static_cast<int>(ArpMode::NUM_MODES)));
+                    break;
+                }
+                case 1: arp.setTempo(constrain(arp.getTempo() + delta * 2.0f, 20.0f, 300.0f)); break;
+                case 2: {
+                    int div = arp.getDivision();
+                    if (delta > 0) div *= 2; else if (delta < 0) div /= 2;
+                    arp.setDivision(constrain(div, 1, 32));
+                    break;
+                }
+                case 3: arp.setGateLength(constrain(arp.getGateLength() + delta * 0.05f, 0.05f, 1.0f)); break;
+                case 4: arp.setOctaveRange(constrain(arp.getOctaveRange() + delta, 1, 4)); break;
+            }
+            break;
+        }
+
+        case DisplayPage::MOD_MATRIX: {
+            if (selectedItem_ == 0) {
+                modSlotIndex_ = constrain(modSlotIndex_ + delta, 0, NUM_MOD_SLOTS - 1);
+            } else {
+                ModSlot& slot = engine_->getModMatrix().getSlot(modSlotIndex_);
+                if (selectedItem_ == 1) {
+                    int src = static_cast<int>(slot.source) + delta;
+                    while (src < 0) src += static_cast<int>(ModSource::NUM_SOURCES);
+                    slot.source = static_cast<ModSource>(src % static_cast<int>(ModSource::NUM_SOURCES));
+                } else if (selectedItem_ == 2) {
+                    int dest = static_cast<int>(slot.destination) + delta;
+                    while (dest < 0) dest += static_cast<int>(ModDest::NUM_DESTINATIONS);
+                    slot.destination = static_cast<ModDest>(dest % static_cast<int>(ModDest::NUM_DESTINATIONS));
+                } else if (selectedItem_ == 3) {
+                    slot.amount = constrain(slot.amount + delta * 0.05f, -1.0f, 1.0f);
+                }
+            }
+            break;
+        }
+
+        case DisplayPage::ENVELOPES:
+            switch (selectedItem_) {
+                case 0: engine_->setAmpADSR(constrain(engine_->getAmpA() + delta * 0.01f, 0.0f, 5.0f), -1, -1, -1); break;
+                case 1: engine_->setAmpADSR(-1, constrain(engine_->getAmpD() + delta * 0.01f, 0.0f, 5.0f), -1, -1); break;
+                case 2: engine_->setAmpADSR(-1, -1, constrain(engine_->getAmpS() + delta * 0.05f, 0.0f, 1.0f), -1); break;
+                case 3: engine_->setAmpADSR(-1, -1, -1, constrain(engine_->getAmpR() + delta * 0.01f, 0.0f, 5.0f)); break;
+                case 4: engine_->setFilterADSR(constrain(engine_->getFltA() + delta * 0.01f, 0.0f, 5.0f), -1, -1, -1); break;
+                case 5: engine_->setFilterADSR(-1, constrain(engine_->getFltD() + delta * 0.01f, 0.0f, 5.0f), -1, -1); break;
+                case 6: engine_->setFilterADSR(-1, -1, constrain(engine_->getFltS() + delta * 0.05f, 0.0f, 1.0f), -1); break;
+                case 7: engine_->setFilterADSR(-1, -1, -1, constrain(engine_->getFltR() + delta * 0.01f, 0.0f, 5.0f)); break;
             }
             break;
 
@@ -161,6 +272,21 @@ void DisplayManager::adjustValue(int delta) {
             }
             break;
 
+        case DisplayPage::SD_BROWSER:
+            if (selectedItem_ == 0) {
+                sdWaveMode_ = !sdWaveMode_;
+                sdFileIndex_ = 0;
+            } else if (selectedItem_ == 1) {
+                int maxFiles = sdWaveMode_ ? engine_->getWavetableManager().getWaveFileCount() : 16;
+                sdFileIndex_ += delta;
+                if (sdFileIndex_ < 0) sdFileIndex_ = maxFiles - 1;
+                if (sdFileIndex_ >= maxFiles) sdFileIndex_ = 0;
+                if (sdFileIndex_ < 0) sdFileIndex_ = 0;
+            } else if (selectedItem_ == 2) {
+                sdSlot_ = (sdSlot_ == 0) ? 1 : 0;
+            }
+            break;
+
         default: break;
     }
 }
@@ -172,7 +298,12 @@ void DisplayManager::drawUI() {
         case DisplayPage::MAIN: drawMainPage(); break;
         case DisplayPage::OSCILLATORS: drawOscPage(); break;
         case DisplayPage::FILTER: drawFilterPage(); break;
+        case DisplayPage::ENVELOPES: drawEnvPage(); break;
+        case DisplayPage::LFO: drawLFOPage(); break;
+        case DisplayPage::MOD_MATRIX: drawModPage(); break;
+        case DisplayPage::ARP: drawArpPage(); break;
         case DisplayPage::EFFECTS: drawEffectsPage(); break;
+        case DisplayPage::MIXER: drawMixerPage(); break;
         case DisplayPage::SD_BROWSER: drawSDPage(); break;
         default: drawMainPage();
     }
@@ -229,17 +360,120 @@ void DisplayManager::drawOscPage() {
     Waveform wf1 = engine_->getOscWaveform(0);
     Waveform wf2 = engine_->getOscWaveform(1);
 
-    display_.drawStr(0, 22, selectedItem_ == 0 ? "> OSC1:" : "  OSC1:");
-    display_.drawStr(45, 22, WAVEFORM_NAMES[(int)wf1]);
+    display_.drawStr(0, 22, selectedItem_ == 0 ? "> W1:" : "  W1:");
+    display_.drawStr(35, 22, WAVEFORM_NAMES[(int)wf1]);
 
-    display_.drawStr(0, 34, selectedItem_ == 1 ? "> OSC2:" : "  OSC2:");
-    display_.drawStr(45, 34, WAVEFORM_NAMES[(int)wf2]);
+    display_.drawStr(64, 22, selectedItem_ == 1 ? "> W2:" : "  W2:");
+    display_.drawStr(99, 22, WAVEFORM_NAMES[(int)wf2]);
 
     snprintf(buf, sizeof(buf), "%s MIX: %.0f%%", selectedItem_ == 2 ? ">" : " ", engine_->getOscMix() * 100.0f);
+    display_.drawStr(0, 34, buf);
+
+    snprintf(buf, sizeof(buf), "%s DET: %.1f", selectedItem_ == 3 ? ">" : " ", engine_->getOscDetune(1));
+    display_.drawStr(64, 34, buf);
+
+    snprintf(buf, sizeof(buf), "%s UNISON: %d", selectedItem_ == 4 ? ">" : " ", engine_->getUnisonVoices());
     display_.drawStr(0, 46, buf);
 
-    snprintf(buf, sizeof(buf), "%s DETUNE: %.1f", selectedItem_ == 3 ? ">" : " ", engine_->getOscDetune(1));
+    snprintf(buf, sizeof(buf), "%s MORPH: %.0f%%", selectedItem_ == 5 ? ">" : " ", engine_->getVoice(0).getOsc(0).getMorph() * 100.0f);
     display_.drawStr(0, 58, buf);
+}
+
+extern const char* MOD_SOURCE_NAMES[];
+extern const char* MOD_DEST_NAMES[];
+extern const char* LFO_WAVEFORM_NAMES[];
+
+void DisplayManager::drawLFOPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "LFOS");
+    display_.drawLine(0, 9, 127, 9);
+
+    for (int i = 0; i < 2; i++) {
+        LFO& lfo = engine_->getLFO(i);
+        int y = 20 + i * 24;
+        snprintf(buf, sizeof(buf), "LFO%d", i + 1);
+        display_.drawStr(0, y, buf);
+
+        snprintf(buf, sizeof(buf), "%sW:%s", selectedItem_ == (i * 4) ? ">" : " ", LFO_WAVEFORM_NAMES[static_cast<int>(lfo.getWaveform())]);
+        display_.drawStr(35, y, buf);
+
+        snprintf(buf, sizeof(buf), "%sF:%.1f", selectedItem_ == (i * 4 + 1) ? ">" : " ", lfo.getFrequency());
+        display_.drawStr(80, y, buf);
+
+        snprintf(buf, sizeof(buf), "%sD:%.0f%%", selectedItem_ == (i * 4 + 2) ? ">" : " ", lfo.getDepth() * 100.0f);
+        display_.drawStr(35, y + 10, buf);
+    }
+}
+
+extern const char* ARP_MODE_NAMES[];
+
+void DisplayManager::drawArpPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "ARPEGGIATOR");
+    display_.drawLine(0, 9, 127, 9);
+
+    Arpeggiator& arp = engine_->getArp();
+
+    snprintf(buf, sizeof(buf), "%s MODE: %s", selectedItem_ == 0 ? ">" : " ", ARP_MODE_NAMES[static_cast<int>(arp.getMode())]);
+    display_.drawStr(0, 22, buf);
+
+    snprintf(buf, sizeof(buf), "%s TEMPO: %.0f BPM", selectedItem_ == 1 ? ">" : " ", arp.getTempo());
+    display_.drawStr(0, 34, buf);
+
+    snprintf(buf, sizeof(buf), "%s DIV: 1/%d", selectedItem_ == 2 ? ">" : " ", arp.getDivision());
+    display_.drawStr(0, 46, buf);
+
+    snprintf(buf, sizeof(buf), "%s GATE: %.0f%%", selectedItem_ == 3 ? ">" : " ", arp.getGateLength() * 100.0f);
+    display_.drawStr(0, 58, buf);
+
+    snprintf(buf, sizeof(buf), "%s OCT: %d", selectedItem_ == 4 ? ">" : " ", arp.getOctaveRange());
+    display_.drawStr(80, 58, buf);
+}
+
+void DisplayManager::drawModPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "MOD MATRIX");
+    display_.drawLine(0, 9, 127, 9);
+
+    snprintf(buf, sizeof(buf), "%s SLOT: %d", selectedItem_ == 0 ? ">" : " ", modSlotIndex_ + 1);
+    display_.drawStr(0, 20, buf);
+
+    ModSlot& slot = engine_->getModMatrix().getSlot(modSlotIndex_);
+
+    snprintf(buf, sizeof(buf), "%s SRC: %s", selectedItem_ == 1 ? ">" : " ", MOD_SOURCE_NAMES[static_cast<int>(slot.source)]);
+    display_.drawStr(0, 32, buf);
+
+    snprintf(buf, sizeof(buf), "%s DST: %s", selectedItem_ == 2 ? ">" : " ", MOD_DEST_NAMES[static_cast<int>(slot.destination)]);
+    display_.drawStr(0, 44, buf);
+
+    snprintf(buf, sizeof(buf), "%s AMT: %.2f", selectedItem_ == 3 ? ">" : " ", slot.amount);
+    display_.drawStr(0, 56, buf);
+}
+
+void DisplayManager::drawEnvPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "ENVELOPES");
+    display_.drawLine(0, 9, 127, 9);
+
+    display_.drawStr(0, 20, "AMP ADSR:");
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 0 ? ">" : "A:", engine_->getAmpA());
+    display_.drawStr(0, 32, buf);
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 1 ? ">" : "D:", engine_->getAmpD());
+    display_.drawStr(32, 32, buf);
+    snprintf(buf, sizeof(buf), "%s%.0f", selectedItem_ == 2 ? ">" : "S:", engine_->getAmpS() * 100.0f);
+    display_.drawStr(64, 32, buf);
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 3 ? ">" : "R:", engine_->getAmpR());
+    display_.drawStr(96, 32, buf);
+
+    display_.drawStr(0, 46, "FLT ADSR:");
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 4 ? ">" : "A:", engine_->getFltA());
+    display_.drawStr(0, 58, buf);
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 5 ? ">" : "D:", engine_->getFltD());
+    display_.drawStr(32, 58, buf);
+    snprintf(buf, sizeof(buf), "%s%.0f", selectedItem_ == 6 ? ">" : "S:", engine_->getFltS() * 100.0f);
+    display_.drawStr(64, 58, buf);
+    snprintf(buf, sizeof(buf), "%s%.1f", selectedItem_ == 7 ? ">" : "R:", engine_->getFltR());
+    display_.drawStr(96, 58, buf);
 }
 
 void DisplayManager::drawFilterPage() {
@@ -287,18 +521,57 @@ void DisplayManager::drawEffectsPage() {
     display_.drawStr(60, 58, engine_->getReverb().isEnabled() ? "ON" : "OFF");
 }
 
-void DisplayManager::drawSDPage() {
-    display_.drawStr(0, 7, "SD CARD STATUS");
+void DisplayManager::drawMixerPage() {
+    char buf[32];
+    display_.drawStr(0, 7, "MIXER");
     display_.drawLine(0, 9, 127, 9);
 
-    display_.drawStr(0, 22, "FILE SYSTEM: FAT32");
-    display_.drawStr(0, 34, "STATUS: READY");
+    snprintf(buf, sizeof(buf), "%s VOL: %.0f%%", selectedItem_ == 0 ? ">" : " ", engine_->getMasterVolume() * 100.0f);
+    display_.drawStr(0, 22, buf);
 
-    char buf[32];
-    snprintf(buf, sizeof(buf), "PRESETS: %d FILES", 12); // Dummy count
-    display_.drawStr(0, 46, buf);
+    snprintf(buf, sizeof(buf), "%s PAN: %.1f", selectedItem_ == 1 ? ">" : " ", engine_->getGlobalPan());
+    display_.drawStr(0, 32, buf);
 
-    display_.drawStr(0, 58, "ENCODER 2: BROWSE");
+    snprintf(buf, sizeof(buf), "%s REV MIX: %.0f%%", selectedItem_ == 2 ? ">" : " ", engine_->getReverb().getMix() * 100.0f);
+    display_.drawStr(0, 42, buf);
+
+    snprintf(buf, sizeof(buf), "%s DLY MIX: %.0f%%", selectedItem_ == 3 ? ">" : " ", engine_->getEffects().delay.getMix() * 100.0f);
+    display_.drawStr(0, 52, buf);
+
+    snprintf(buf, sizeof(buf), "%s CHO MIX: %.0f%%", selectedItem_ == 4 ? ">" : " ", engine_->getEffects().chorus.getMix() * 100.0f);
+    display_.drawStr(0, 62, buf);
+}
+
+void DisplayManager::drawSDPage() {
+    display_.drawStr(0, 7, "SD BROWSER");
+    display_.drawLine(0, 9, 127, 9);
+
+    if (loadingFlag_) {
+        display_.drawStr(40, 35, "LOADING...");
+        return;
+    }
+
+    display_.drawStr(0, 22, selectedItem_ == 0 ? "> MODE:" : "  MODE:");
+    display_.drawStr(50, 22, sdWaveMode_ ? "WAVES" : "PRESETS");
+
+    display_.drawStr(0, 34, selectedItem_ == 1 ? "> FILE:" : "  FILE:");
+
+    if (sdWaveMode_) {
+        const char* name = engine_->getWavetableManager().getWaveFileName(sdFileIndex_);
+        if (name) display_.drawStr(45, 34, name);
+        else display_.drawStr(45, 34, "<EMPTY>");
+    } else {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "preset_%d.sy", sdFileIndex_);
+        display_.drawStr(45, 34, buf);
+    }
+
+    if (sdWaveMode_) {
+        display_.drawStr(0, 46, selectedItem_ == 2 ? "> DEST SLOT:" : "  DEST SLOT:");
+        display_.drawStr(80, 46, sdSlot_ == 0 ? "SLOT A" : "SLOT B");
+    }
+
+    display_.drawStr(0, 58, "ENC2: CLICK TO LOAD");
 }
 
 void DisplayManager::displayTaskWrapper(void* param) {

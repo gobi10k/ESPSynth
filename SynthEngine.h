@@ -15,6 +15,7 @@
 #include "Euclidean.h"
 #include "Resonator.h"
 #include "CombFilter.h"
+#include "WavetableManager.h"
 #include <driver/i2s_std.h>
 
 constexpr uint8_t NUM_VOICES = 4;
@@ -128,7 +129,21 @@ public:
     // Envelopes
     void setAmpADSR(float a, float d, float s, float r);
     void setFilterADSR(float a, float d, float s, float r);
+    float getAmpA() const { return ampA_; }
+    float getAmpD() const { return ampD_; }
+    float getAmpS() const { return ampS_; }
+    float getAmpR() const { return ampR_; }
+    float getFltA() const { return fltA_; }
+    float getFltD() const { return fltD_; }
+    float getFltS() const { return fltS_; }
+    float getFltR() const { return fltR_; }
     
+    // Unison
+    void setUnisonVoices(uint8_t count);
+    void setUnisonDetune(float cents);
+    uint8_t getUnisonVoices() const { return unisonVoices_; }
+    float getUnisonDetune() const { return unisonDetune_; }
+
     // Glide
     void setGlideTime(float ms);
     
@@ -165,6 +180,11 @@ public:
     Wavefolder& getWavefolder() { return wavefolder_; }
     FDNReverb& getReverb() { return reverb_; }
     
+    // Wavetable manager
+    WavetableManager& getWavetableManager() { return wtManager_; }
+    void loadWavetableForOsc(int osc, int slot, const char* filename);
+    int getLoadedWaveIndex(int slot) const { return currentWaveIdx_[slot]; }
+
     // Master
     void setMasterVolume(float vol);
     float getMasterVolume() const { return masterVolume_.getTarget(); }
@@ -213,6 +233,11 @@ private:
     float fltA_, fltD_, fltS_, fltR_;
     float glideTime_;
     
+    // Unison
+    uint8_t unisonVoices_;
+    float unisonDetune_;
+    uint8_t voiceNotes_[NUM_VOICES]; // Track which note each voice is playing
+
     // Pitch bend
     SmoothedValue pitchBend_;
     uint8_t pitchBendRange_;
@@ -245,6 +270,10 @@ private:
     Wavefolder wavefolder_;
     FDNReverb reverb_;
     
+    // Wavetable manager
+    WavetableManager wtManager_;
+    int currentWaveIdx_[2];
+
     // Master
     SmoothedValue masterVolume_;
     float globalPan_;
